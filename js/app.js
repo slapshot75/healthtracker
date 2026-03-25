@@ -1697,18 +1697,21 @@ function setSyncStatus(state, text) {
 
 async function supabaseRequest(method, table, body, query = '') {
   const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
+  // For upsert we always use POST with on-conflict header
+  const isUpsert = method === 'UPSERT';
+  const fetchMethod = isUpsert ? 'POST' : method;
   const res = await fetch(url, {
-    method,
+    method: fetchMethod,
     headers: {
       'apikey':        SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
       'Content-Type':  'application/json',
-      'Prefer':        method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : '',
+      'Prefer':        isUpsert ? 'resolution=merge-duplicates,return=minimal' :
+                       method === 'POST' ? 'return=minimal' : '',
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  // 409 Conflict = already exists → treat as success for upsert
-  if (res.status === 409 || res.status === 204 || res.status === 201) return null;
+  if (res.status === 204 || res.status === 201) return null;
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`${res.status}: ${err}`);
@@ -1732,20 +1735,20 @@ async function syncUpload() {
 
     // Upsert into purin_history
     for (const day of history) {
-      await supabaseRequest('POST', 'purin_history', {
+      await supabaseRequest('UPSERT', 'purin_history', {
         user_id: userId, ts: day.ts, date: day.date,
         items: day.items, totals: day.totals || calcTotals(day.items),
       });
     }
     // Upsert into walk_history
     for (const day of walkHistory) {
-      await supabaseRequest('POST', 'walk_history', {
+      await supabaseRequest('UPSERT', 'walk_history', {
         user_id: userId, ts: day.ts, date: day.date, data: day,
       });
     }
     // Upsert today
     if (today.length) {
-      await supabaseRequest('POST', 'purin_today', {
+      await supabaseRequest('UPSERT', 'purin_today', {
         user_id: userId, ts: Date.now(), items: today,
       });
     }
