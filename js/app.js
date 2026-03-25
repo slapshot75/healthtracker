@@ -1670,11 +1670,10 @@ function importData(event) {
 }
 
 // ── Supabase Sync ───────────────────────────────────────────────
-const SUPABASE_URL = 'https://sqcdjemmerejltbncqrs.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxY2RqZW1tZXJlamx0Ym5jcXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDQzMTgsImV4cCI6MjA5MDAyMDMxOH0.26aAM0E6VhgquJ-hcUhAwXGrAEBGCrTXJMdtuMpSTYE';
+const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
+const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';
 const SYNC_USER_KEY = 'purin_sync_user_id';
-// https://sqcdjemmerejltbncqrs.supabase.co
-// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxY2RqZW1tZXJlamx0Ym5jcXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDQzMTgsImV4cCI6MjA5MDAyMDMxOH0.26aAM0E6VhgquJ-hcUhAwXGrAEBGCrTXJMdtuMpSTYE
+
 // Restore saved user-id
 (function() {
   const saved = localStorage.getItem(SYNC_USER_KEY);
@@ -1721,7 +1720,7 @@ async function supabaseRequest(method, table, body, query = '') {
 async function syncUpload() {
   const userId = getSyncUserId();
   if (!userId) return;
-  if (SUPABASE_URL === 'SUPABASE_URL_PLACEHOLDER') {
+  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
@@ -1763,7 +1762,7 @@ async function syncUpload() {
 async function syncDownload() {
   const userId = getSyncUserId();
   if (!userId) return;
-  if (SUPABASE_URL === 'SUPABASE_URL_PLACEHOLDER') {
+  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
