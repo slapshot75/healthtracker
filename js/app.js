@@ -1670,8 +1670,8 @@ function importData(event) {
 }
 
 // ── Supabase Sync ───────────────────────────────────────────────
-const SUPABASE_URL = 'https://sqcdjemmerejltbncqrs.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxY2RqZW1tZXJlamx0Ym5jcXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDQzMTgsImV4cCI6MjA5MDAyMDMxOH0.26aAM0E6VhgquJ-hcUhAwXGrAEBGCrTXJMdtuMpSTYE';
+const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
+const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';
 const SYNC_USER_KEY = 'purin_sync_user_id';
 
 // Restore saved user-id
@@ -1703,7 +1703,7 @@ async function supabaseRequest(method, table, body, query = '') {
       'apikey':        SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
       'Content-Type':  'application/json',
-      'Prefer':        method === 'POST' ? 'resolution=merge-duplicates' : '',
+      'Prefer':        method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : '',
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -1711,7 +1711,10 @@ async function supabaseRequest(method, table, body, query = '') {
     const err = await res.text();
     throw new Error(`${res.status}: ${err}`);
   }
-  return method === 'DELETE' ? null : res.json();
+  // POST with return=minimal returns empty body (204/201) – safe to skip json()
+  if (method === 'DELETE' || method === 'POST') return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function syncUpload() {
