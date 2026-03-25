@@ -1695,58 +1695,55 @@ function setSyncStatus(state, text) {
   label.textContent = text;
 }
 
-async function supabaseRequest(method, table, body, query = '') {
-  // UPSERT nutzt den speziellen Supabase-Endpunkt
-  const isUpsert = method === 'UPSERT';
-  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
-  const fetchMethod = isUpsert ? 'POST' : method;
-  const prefer = isUpsert
-    ? 'resolution=merge-duplicates,return=minimal'
-    : method === 'POST' ? 'return=minimal' : '';
+async function supabaseDelete(table, ts, userId) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}?ts=eq.${ts}&user_id=eq.${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Prefer': 'return=minimal',
+    },
+  });
+}
 
-  const res = await fetch(url, {
-    method: fetchMethod,
+async function supabaseInsert(table, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
     headers: {
       'apikey':        SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
       'Content-Type':  'application/json',
-      ...(prefer ? { 'Prefer': prefer } : {}),
+      'Prefer':        'return=minimal',
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 201 || res.status === 204) return null;
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`${res.status}: ${err}`);
+  }
+  return null;
+}
+
+async function supabaseUpsert(table, body) {
+  // Delete existing entry (if any), then insert fresh
+  await supabaseDelete(table, body.ts, body.user_id);
+  await supabaseInsert(table, body);
+}
+
+async function supabaseRequest(method, table, body, query = '') {
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'apikey':        SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=minimal',
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-
-  // Erfolgreiche leere Antworten
   if (res.status === 204 || res.status === 201) return null;
-
-  // 409 bei UPSERT = Unique-Constraint trotz merge-duplicates
-  // Fallback: DELETE + INSERT
-  if (res.status === 409 && isUpsert && body) {
-    const ts = body.ts;
-    if (ts) {
-      // Bestehenden Eintrag löschen
-      await fetch(`${SUPABASE_URL}/rest/v1/${table}?ts=eq.${ts}&user_id=eq.${encodeURIComponent(body.user_id)}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-        },
-      });
-      // Neu einfügen
-      const res2 = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'apikey':        SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type':  'application/json',
-          'Prefer':        'return=minimal',
-        },
-        body: JSON.stringify(body),
-      });
-      if (res2.status === 201 || res2.status === 204) return null;
-    }
-    return null;
-  }
-
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`${res.status}: ${err}`);
@@ -1770,20 +1767,20 @@ async function syncUpload() {
 
     // Upsert into purin_history
     for (const day of history) {
-      await supabaseRequest('UPSERT', 'purin_history', {
+      await supabaseUpsert('purin_history', {
         user_id: userId, ts: day.ts, date: day.date,
         items: day.items, totals: day.totals || calcTotals(day.items),
       });
     }
     // Upsert into walk_history
     for (const day of walkHistory) {
-      await supabaseRequest('UPSERT', 'walk_history', {
+      await supabaseUpsert('walk_history', {
         user_id: userId, ts: day.ts, date: day.date, data: day,
       });
     }
     // Upsert today
     if (today.length) {
-      await supabaseRequest('UPSERT', 'purin_today', {
+      await supabaseUpsert('purin_today', {
         user_id: userId, ts: Date.now(), items: today,
       });
     }
