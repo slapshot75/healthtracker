@@ -1783,36 +1783,39 @@ async function syncDownload() {
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=1`);
 
-    // Merge purin history
+    // Merge purin history — server wins (neueste Version aus Supabase überschreibt lokal)
     const existingPurin = getHistory();
-    const mergedPurin   = [...existingPurin];
-    let purinAdded = 0;
+    const purinMap = new Map(existingPurin.map(d => [d.ts, d]));
+    let purinAdded = 0, purinUpdated = 0;
     (purinRows || []).forEach(row => {
-      if (!mergedPurin.some(d => d.ts === row.ts)) {
-        mergedPurin.push({ ts: row.ts, date: row.date, items: row.items, totals: row.totals });
+      const local = purinMap.get(row.ts);
+      if (!local) {
+        purinMap.set(row.ts, { ts: row.ts, date: row.date, items: row.items, totals: row.totals });
         purinAdded++;
+      } else {
+        // Server-Version überschreibt lokale Version
+        purinMap.set(row.ts, { ts: row.ts, date: row.date, items: row.items, totals: row.totals });
+        purinUpdated++;
       }
     });
-    mergedPurin.sort((a, b) => b.ts - a.ts);
+    const mergedPurin = Array.from(purinMap.values()).sort((a, b) => b.ts - a.ts);
     if (mergedPurin.length > 90) mergedPurin.splice(90);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(mergedPurin));
 
-    // Merge walk history
+    // Merge walk history — server wins
     const existingWalk = getWalkHistory();
-    const mergedWalk   = [...existingWalk];
+    const walkMap = new Map(existingWalk.map(d => [d.ts, d]));
     let walkAdded = 0;
     (walkRows || []).forEach(row => {
-      if (!mergedWalk.some(d => d.ts === row.ts)) {
-        mergedWalk.push(row.data);
-        walkAdded++;
-      }
+      walkMap.set(row.ts, row.data);
+      if (!existingWalk.some(d => d.ts === row.ts)) walkAdded++;
     });
-    mergedWalk.sort((a, b) => b.ts - a.ts);
+    const mergedWalk = Array.from(walkMap.values()).sort((a, b) => b.ts - a.ts);
     if (mergedWalk.length > 200) mergedWalk.splice(200);
     localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(mergedWalk));
 
-    // Restore today if local is empty
-    if (todayRows?.length && !trackerItems.length) {
+    // Restore today — server always wins
+    if (todayRows?.length) {
       trackerItems = todayRows[0].items || [];
       saveToStorage();
     }
@@ -1824,7 +1827,7 @@ async function syncDownload() {
     if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
 
     setSyncStatus('ok', `Geladen ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`);
-    showToast(`✓ ${purinAdded} Purin + ${walkAdded} Geh-Einträge neu geladen`);
+    showToast(`✓ ${purinAdded} neu + ${purinUpdated} aktualisiert (Purin) · ${walkAdded} Geh-Einträge`);
   } catch(e) {
     setSyncStatus('error', 'Fehler');
     showToast('⚠ Download fehlgeschlagen: ' + e.message, 4000);
