@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gesundheitstools – Purin & Gehrechner</title>
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Gesundheitstools</h1>
+    <p>Puringehalt · Tagesrechner · Gehrechner</p>
+  </header>
+
+  <!-- Seiten-Navigation -->
+  <nav class="page-nav" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;">
+      <button class="page-nav-btn active" id="pnav-purin" onclick="switchPage('purin')">Lebensmittel & Purin</button>
+      <button class="page-nav-btn" id="pnav-walk" onclick="switchPage('walk')">Gehrechner</button>
+    </div>
+    <div class="data-btns" style="padding-bottom:4px;">
+      <input type="text" id="sync-user-id" placeholder="Geräte-ID (z.B. max-pc)" style="width:160px;font-size:12px;height:34px;" title="Eindeutige ID für dieses Gerät – gleiche ID auf allen Geräten verwenden">
+      <button class="data-btn" onclick="syncUpload()" title="Daten zu Supabase hochladen">☁ Upload</button>
+      <button class="data-btn" onclick="syncDownload()" title="Daten von Supabase laden">☁ Download</button>
+      <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Nicht verbunden</span></div>
+      <div style="width:1px;height:20px;background:var(--border2);margin:0 4px;"></div>
+      <button class="data-btn" onclick="exportData()" title="Alle Daten als JSON-Datei herunterladen">⬇ Export</button>
+      <button class="data-btn import" onclick="document.getElementById('import-file').click()" title="JSON-Datei importieren">⬆ Import</button>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Seite 1: Purin -->
+  <div class="page-section active" id="page-purin">
+
+  <div class="stats" id="stats"></div>
+
+  <!-- Tabs: Tagesverbrauch & Historie -->
+  <div class="tab-box">
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-tracker" onclick="switchTab('tracker')">Tagesverbrauch</button>
+      <button class="tab-btn" id="tab-btn-history" onclick="switchTab('history')">Historie</button>
+      <button class="tab-btn" id="tab-btn-chart" onclick="switchTab('chart')">Verlauf</button>
+    </div>
+
+    <!-- Tab: Tagesverbrauch -->
+    <div class="tab-panel active" id="tab-tracker">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem;">
+        <div>
+          <div class="tracker-title">Tagesverbrauchsrechner</div>
+          <div class="tracker-sub">Lebensmittel direkt aus der Tabelle per + hinzufügen oder hier suchen</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="tracker-reset" onclick="saveDay()" id="btn-save-day" style="background:var(--text);color:var(--bg);border-color:var(--text);" disabled>Tag speichern</button>
+          <button class="tracker-reset" onclick="resetTracker()">Zurücksetzen</button>
+        </div>
+      </div>
+
+      <div class="tracker-add">
+        <div class="suggest-wrap">
+          <input type="text" id="tracker-search" placeholder="Lebensmittel suchen…" oninput="showSuggestions()" onkeydown="handleKey(event)" autocomplete="off">
+          <div class="suggestions" id="suggestions" style="display:none"></div>
+        </div>
+        <input type="number" id="tracker-grams" value="100" min="1" max="2000" placeholder="g">
+        <button onclick="addFromInput()">+ Hinzufügen</button>
+      </div>
+
+      <div id="tracker-list-wrap">
+        <div class="tracker-empty" id="tracker-empty">Noch keine Einträge – klicke auf + in der Tabelle oder suche oben.</div>
+        <div class="tracker-list" id="tracker-list" style="display:none"></div>
+      </div>
+
+      <div class="tracker-totals" id="tracker-totals" style="display:none">
+        <div class="tracker-total">
+          <div class="tracker-total-label">Purin</div>
+          <div class="tracker-total-val" id="t-purin">0 mg</div>
+          <div class="tracker-total-limit" id="t-purin-limit"></div>
+          <div class="progress-bar"><div class="progress-fill" id="t-purin-bar" style="width:0%"></div></div>
+        </div>
+        <div class="tracker-total">
+          <div class="tracker-total-label">Kalorien</div>
+          <div class="tracker-total-val" id="t-kcal">0 kcal</div>
+          <div class="tracker-total-limit"></div>
+          <div class="progress-bar"><div class="progress-fill pf-ok" id="t-kcal-bar" style="width:0%"></div></div>
+        </div>
+        <div class="tracker-total">
+          <div class="tracker-total-label">Eiweiß</div>
+          <div class="tracker-total-val" id="t-protein">0 g</div>
+          <div class="tracker-total-limit"></div>
+          <div class="progress-bar"><div class="progress-fill pf-ok" id="t-protein-bar" style="width:0%"></div></div>
+        </div>
+        <div class="tracker-total">
+          <div class="tracker-total-label">Kohlenhydrate</div>
+          <div class="tracker-total-val" id="t-carbs">0 g</div>
+          <div class="tracker-total-limit"></div>
+          <div class="progress-bar"><div class="progress-fill pf-ok" id="t-carbs-bar" style="width:0%"></div></div>
+        </div>
+        <div class="tracker-total">
+          <div class="tracker-total-label">Fett</div>
+          <div class="tracker-total-val" id="t-fat">0 g</div>
+          <div class="tracker-total-limit"></div>
+          <div class="progress-bar"><div class="progress-fill pf-ok" id="t-fat-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Historie -->
+    <div class="tab-panel" id="tab-history">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem;">
+        <div>
+          <div class="history-title">Tageshistorie</div>
+          <div class="history-sub">Gespeicherte Tage – lokal im Browser gespeichert</div>
+        </div>
+        <button class="tracker-reset" onclick="clearHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+      </div>
+      <div id="history-list"><div class="history-empty">Noch keine gespeicherten Tage.</div></div>
+    </div>
+
+
+    <!-- Tab: Verlaufsdiagramm -->
+    <div class="tab-panel" id="tab-chart">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;">
+        <div>
+          <div class="history-title">Verlauf</div>
+          <div class="history-sub">Tägliche Nährwerte aus der gespeicherten Historie</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;color:var(--text2);white-space:nowrap;">Von</label>
+            <input type="date" id="chart-from" onchange="renderChart()" style="width:150px;font-size:13px;">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;color:var(--text2);white-space:nowrap;">Bis</label>
+            <input type="date" id="chart-to" onchange="renderChart()" style="width:150px;font-size:13px;">
+          </div>
+          <select id="chart-metric" onchange="renderChart()" style="width:auto;">
+            <option value="purin">Purin (mg)</option>
+            <option value="kcal">Kalorien (kcal)</option>
+            <option value="protein">Eiweiß (g)</option>
+            <option value="carbs">Kohlenhydrate (g)</option>
+            <option value="fat">Fett (g)</option>
+            <option value="fiber">Ballaststoffe (g)</option>
+          </select>
+          <button onclick="resetDateRange()" style="height:38px;padding:0 12px;background:none;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;">Alle anzeigen</button>
+        </div>
+      </div>
+      <div id="chart-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Noch keine gespeicherten Tage – speichere zuerst einen Tagesverbrauch.</div>
+      <div id="chart-range-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Keine Daten im gewählten Zeitraum.</div>
+      <div style="position:relative;width:100%;">
+        <canvas id="history-chart" style="width:100%;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search" placeholder="Lebensmittel suchen…" oninput="render()">
+    </div>
+    <select id="category" onchange="render()" style="width:auto;flex-shrink:0;">
+      <option value="">Alle Kategorien</option>
+      <option value="Fleisch">Fleisch</option>
+      <option value="Fisch">Fisch &amp; Meeresfrüchte</option>
+      <option value="Innereien">Innereien</option>
+      <option value="Wurst">Wurst &amp; Aufschnitt</option>
+      <option value="Gemüse">Gemüse &amp; Hülsenfrüchte</option>
+      <option value="Getreide">Getreide &amp; Backwaren</option>
+      <option value="Milch">Milch &amp; Eier</option>
+      <option value="Getränke">Getränke</option>
+      <option value="Nüsse">Nüsse &amp; Samen</option>
+      <option value="Obst">Obst</option>
+      <option value="Sonstiges">Sonstiges</option>
+    </select>
+    <select id="level" onchange="render()" style="width:auto;flex-shrink:0;">
+      <option value="">Alle Stufen</option>
+      <option value="low">Niedrig (&lt;50)</option>
+      <option value="medium">Mittel (50–149)</option>
+      <option value="high">Hoch (150–299)</option>
+      <option value="very-high">Sehr hoch (≥300)</option>
+    </select>
+    <select id="rec" onchange="render()" style="width:auto;flex-shrink:0;">
+      <option value="">Alle Empfehlungen</option>
+      <option value="free">Täglich (unbegrenzt)</option>
+      <option value="moderate">5–7× pro Woche</option>
+      <option value="limited">2–4× pro Woche</option>
+      <option value="rare">1× pro Woche</option>
+      <option value="avoid">Meiden / nie</option>
+    </select>
+  </div>
+
+  <div class="rec-box">
+    <div class="rec-box-item"><div class="rec-box-dot" style="background:#639922"></div><div class="rec-box-text"><strong>Täglich (unbegrenzt)</strong>&lt; 50 mg · beliebige Menge täglich</div></div>
+    <div class="rec-box-item"><div class="rec-box-dot" style="background:#378ADD"></div><div class="rec-box-text"><strong>5–7× pro Woche</strong>50–149 mg · bis ca. 150 g pro Portion</div></div>
+    <div class="rec-box-item"><div class="rec-box-dot" style="background:#EF9F27"></div><div class="rec-box-text"><strong>2–4× pro Woche</strong>150–199 mg · max. 100–150 g pro Portion</div></div>
+    <div class="rec-box-item"><div class="rec-box-dot" style="background:#D85A30"></div><div class="rec-box-text"><strong>1× pro Woche</strong>200–299 mg · max. 100 g pro Portion</div></div>
+    <div class="rec-box-item"><div class="rec-box-dot" style="background:#E24B4A"></div><div class="rec-box-text"><strong>Meiden / nie</strong>≥ 300 mg · bei Gicht strikt meiden</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#639922"></span>Niedrig – unter 50 mg</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#EF9F27"></span>Mittel – 50 bis 149 mg</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#D85A30"></span>Hoch – 150 bis 299 mg</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#E24B4A"></span>Sehr hoch – ab 300 mg</span>
+  </div>
+
+  <p class="count-info" id="count-info"></p>
+
+
+
+  <div class="card" style="overflow:hidden;">
+    <div id="body-scroll" style="overflow-x:auto; overflow-y:clip;">
+      <table id="body-table" style="width:100%;border-collapse:separate;border-spacing:0;font-size:14px;table-layout:fixed;min-width:1400px;">
+        <colgroup>
+          <col style="width:48px">
+          <col style="width:44px">
+          <col style="width:200px">
+          <col style="width:130px">
+          <col style="width:150px">
+          <col style="width:75px">
+          <col style="width:90px">
+          <col style="width:130px">
+          <col style="width:120px">
+          <col style="width:75px">
+          <col style="width:90px">
+          <col style="width:220px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="th-add"></th>
+            <th style="text-align:center;">#</th>
+            <th onclick="sort('name')" id="th-name">Lebensmittel <span class="arrow" id="arr-name">↕</span></th>
+            <th onclick="sort('category')" id="th-category">Kategorie <span class="arrow" id="arr-category">↕</span></th>
+            <th onclick="sort('purin')" id="th-purin" class="sorted">Purin mg/100g <span class="arrow" id="arr-purin">↑</span></th>
+            <th onclick="sort('kcal')" id="th-kcal">kcal <span class="arrow" id="arr-kcal">↕</span></th>
+            <th onclick="sort('protein')" id="th-protein">Eiweiß g <span class="arrow" id="arr-protein">↕</span></th>
+            <th onclick="sort('carbs')" id="th-carbs">Kohlenhydrate g <span class="arrow" id="arr-carbs">↕</span></th>
+            <th onclick="sort('fiber')" id="th-fiber">Ballaststoffe g <span class="arrow" id="arr-fiber">↕</span></th>
+            <th onclick="sort('fat')" id="th-fat">Fett g <span class="arrow" id="arr-fat">↕</span></th>
+            <th onclick="sort('level')" id="th-level">Stufe <span class="arrow" id="arr-level">↕</span></th>
+            <th onclick="sort('rec')" id="th-rec">Verzehrempfehlung <span class="arrow" id="arr-rec">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" style="display:none">Keine Einträge gefunden.</div>
+    </div>
+  </div>
+
+  <footer>Angaben sind Richtwerte aus ernährungswissenschaftlichen Quellen · mg Harnsäure-Äquivalent pro 100 g</footer>
+  </div><!-- /page-purin -->
+
+  <!-- Seite 2: Gehrechner -->
+  <div class="page-section" id="page-walk">
+
+    <div class="tab-box">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="wtab-btn-calc"    onclick="switchWalkTab('calc')">Rechner</button>
+        <button class="tab-btn"        id="wtab-btn-history" onclick="switchWalkTab('history')">Historie</button>
+        <button class="tab-btn"        id="wtab-btn-chart"   onclick="switchWalkTab('chart')">Verlauf</button>
+      </div>
+
+      <!-- Tab: Rechner -->
+      <div class="tab-panel active" id="wtab-calc">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:1.25rem;">
+          <button onclick="saveWalkDay()" id="btn-save-walk"
+            style="height:34px;padding:0 16px;background:var(--text);color:var(--bg);border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">
+            Berechnung speichern
+          </button>
+        </div>
+        <div class="walk-grid">
+          <!-- Eingaben -->
+          <div class="walk-card">
+            <div class="walk-card-title">Parameter eingeben</div>
+            <div class="walk-field">
+              <div class="walk-label">Körpergewicht <span id="lbl-weight">75 kg</span></div>
+              <input class="walk-slider" type="range" id="w-weight" min="40" max="180" value="75" step="1" oninput="calcWalk()">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Gehgeschwindigkeit <span id="lbl-speed">2.5 km/h</span></div>
+              <input class="walk-slider" type="range" id="w-speed" min="0.5" max="8" value="2.5" step="0.1" oninput="calcWalk()">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Steigung <span id="lbl-grade">13 %</span></div>
+              <input class="walk-slider" type="range" id="w-grade" min="0" max="40" value="13" step="0.5" oninput="calcWalk()">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Dauer <span id="lbl-duration">60 min</span></div>
+              <input class="walk-slider" type="range" id="w-duration" min="5" max="300" value="60" step="5" oninput="calcWalk()">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Alter <span id="lbl-age">45 Jahre</span></div>
+              <input class="walk-slider" type="range" id="w-age" min="15" max="90" value="45" step="1" oninput="calcWalk()">
+            </div>
+            <div class="walk-field" style="margin-bottom:0;">
+              <div class="walk-label" style="margin-bottom:10px;">Geschlecht</div>
+              <div style="display:flex;gap:10px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;"><input type="radio" name="w-sex" value="m" checked onchange="calcWalk()"> Männlich</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;"><input type="radio" name="w-sex" value="f" onchange="calcWalk()"> Weiblich</label>
+              </div>
+            </div>
+          </div>
+          <!-- Ergebnisse -->
+          <div class="walk-card">
+            <div class="walk-card-title">Ergebnisse</div>
+            <div class="walk-results">
+              <div class="walk-result highlight"><div class="walk-result-label">Zurückgelegte Strecke</div><div class="walk-result-val" id="r-dist">—</div><div class="walk-result-unit">Meter</div></div>
+              <div class="walk-result highlight"><div class="walk-result-label">Höhenmeter</div><div class="walk-result-val" id="r-elev">—</div><div class="walk-result-unit">Meter Aufstieg</div></div>
+              <div class="walk-result"><div class="walk-result-label">Kalorienverbrauch</div><div class="walk-result-val" id="r-kcal">—</div><div class="walk-result-unit">kcal gesamt</div></div>
+              <div class="walk-result"><div class="walk-result-label">kcal / Minute</div><div class="walk-result-val" id="r-kcal-min">—</div><div class="walk-result-unit">kcal / Min</div></div>
+              <div class="walk-result"><div class="walk-result-label">MET-Wert</div><div class="walk-result-val" id="r-met">—</div><div class="walk-result-unit">metabolisch</div></div>
+              <div class="walk-result"><div class="walk-result-label">Ø Herzfrequenz</div><div class="walk-result-val" id="r-hr">—</div><div class="walk-result-unit">Schläge / Min</div></div>
+              <div class="walk-result"><div class="walk-result-label">Schritte (ca.)</div><div class="walk-result-val" id="r-steps">—</div><div class="walk-result-unit">Schritte</div></div>
+              <div class="walk-result"><div class="walk-result-label">Trinkbedarf</div><div class="walk-result-val" id="r-water">—</div><div class="walk-result-unit">ml empfohlen</div></div>
+            </div>
+            <div class="walk-info" id="walk-info"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Walk-Historie -->
+      <div class="tab-panel" id="wtab-history">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem;">
+          <div>
+            <div class="history-title">Geh-Historie</div>
+            <div class="history-sub">Gespeicherte Berechnungen – lokal im Browser</div>
+          </div>
+          <button class="tracker-reset" onclick="clearWalkHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+        </div>
+        <div id="walk-history-list"><div class="walk-history-empty">Noch keine gespeicherten Einträge.</div></div>
+      </div>
+
+      <!-- Tab: Walk-Verlauf -->
+      <div class="tab-panel" id="wtab-chart">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;">
+          <div>
+            <div class="history-title">Verlauf</div>
+            <div class="history-sub">Entwicklung deiner Geheinheiten über die Zeit</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:12px;color:var(--text2);">Von</label>
+              <input type="date" id="wchart-from" onchange="renderWalkChart()" style="width:150px;font-size:13px;">
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:12px;color:var(--text2);">Bis</label>
+              <input type="date" id="wchart-to" onchange="renderWalkChart()" style="width:150px;font-size:13px;">
+            </div>
+            <select id="wchart-metric" onchange="renderWalkChart()" style="width:auto;">
+              <option value="dist">Strecke (m)</option>
+              <option value="elev">Höhenmeter</option>
+              <option value="kcal">Kalorien (kcal)</option>
+              <option value="steps">Schritte</option>
+              <option value="met">MET-Wert</option>
+              <option value="duration">Dauer (min)</option>
+            </select>
+            <button onclick="resetWalkDateRange()" style="height:38px;padding:0 12px;background:none;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;">Alle anzeigen</button>
+          </div>
+        </div>
+        <div id="wchart-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Noch keine gespeicherten Einträge.</div>
+        <div id="wchart-range-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Keine Daten im gewählten Zeitraum.</div>
+        <div style="position:relative;width:100%;"><canvas id="walk-chart"></canvas></div>
+      </div>
+    </div>
+
+  </div><!-- /page-walk -->
+</div>
+
+<!-- Gramm-Modal -->
+<div class="modal-overlay" id="gram-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-food-name" id="modal-name"></div>
+    <div class="modal-food-meta" id="modal-meta"></div>
+    <div class="modal-label">Menge eingeben</div>
+    <div class="modal-gram-row">
+      <input type="number" id="modal-grams" value="100" min="1" max="5000" oninput="updatePreview()">
+      <span>g</span>
+    </div>
+    <div class="modal-preview" id="modal-preview"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
+      <button class="btn-confirm" onclick="confirmAdd()">Zum Rechner hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit-Historie-Modal -->
+<div class="edit-modal-overlay" id="edit-modal" onclick="closeEditModal(event)">
+  <div class="edit-modal">
+    <div class="edit-modal-header">
+      <div>
+        <div class="edit-modal-title">Tag bearbeiten</div>
+        <div class="edit-modal-date" id="edit-modal-date"></div>
+      </div>
+      <button onclick="closeEditModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);font-family:inherit;">×</button>
+    </div>
+    <!-- Neues Lebensmittel hinzufügen -->
+    <div class="edit-modal-add">
+      <div class="suggest-wrap">
+        <input type="text" id="edit-search" placeholder="Lebensmittel suchen…" oninput="showEditSuggestions()" autocomplete="off">
+        <div class="edit-suggestions" id="edit-suggestions" style="display:none"></div>
+      </div>
+      <input type="number" id="edit-grams" value="100" min="1" max="5000" placeholder="g">
+      <button onclick="addToEditDay()">+ Add</button>
+    </div>
+    <!-- Einträge -->
+    <div class="edit-modal-body">
+      <div id="edit-items"></div>
+    </div>
+    <!-- Summen -->
+    <div class="edit-totals" id="edit-totals"></div>
+    <!-- Aktionen -->
+    <div class="edit-modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">Abbrechen</button>
+      <button class="btn-confirm" onclick="saveEditDay()">Änderungen speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="js/app.js"></script>
+</body>
+</html>
