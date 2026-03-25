@@ -1673,7 +1673,7 @@ function importData(event) {
 const SUPABASE_URL = 'https://sqcdjemmerejltbncqrs.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxY2RqZW1tZXJlamx0Ym5jcXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDQzMTgsImV4cCI6MjA5MDAyMDMxOH0.26aAM0E6VhgquJ-hcUhAwXGrAEBGCrTXJMdtuMpSTYE';
 const SYNC_USER_KEY = 'purin_sync_user_id';
-
+//
 // Restore saved user-id
 (function() {
   const saved = localStorage.getItem(SYNC_USER_KEY);
