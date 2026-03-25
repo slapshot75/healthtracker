@@ -1726,8 +1726,19 @@ async function supabaseInsert(table, body) {
 }
 
 async function supabaseUpsert(table, body) {
-  // Delete existing entry (if any), then insert fresh
-  await supabaseDelete(table, body.ts, body.user_id);
+  // purin_today hat unique auf user_id, alle anderen auf ts
+  if (table === 'purin_today') {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${encodeURIComponent(body.user_id)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Prefer': 'return=minimal',
+      },
+    });
+  } else {
+    await supabaseDelete(table, body.ts, body.user_id);
+  }
   await supabaseInsert(table, body);
 }
 
