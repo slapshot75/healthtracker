@@ -13,19 +13,17 @@ pages:
     - mkdir -p public/css
     - mkdir -p public/js
 
-    # CSS und JS unverändert kopieren
+    # CSS und JS kopieren + Supabase-Keys in app.js einsetzen
     - cp css/styles.css public/css/styles.css
-    - cp js/app.js      public/js/app.js
-
-    # Supabase-Keys in index.html einsetzen und in public/ ablegen
-    - sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g"         index.html > public/index.html
-    - sed -i "s|SUPABASE_KEY_PLACEHOLDER|${SUPABASE_ANON_KEY}|g" public/index.html
+    - sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g"         js/app.js > public/js/app.js
+    - sed -i "s|SUPABASE_KEY_PLACEHOLDER|${SUPABASE_ANON_KEY}|g" public/js/app.js
+    - cp index.html public/index.html
 
     # Verifikation
-    - grep -q "supabase.co" public/index.html && echo "OK SUPABASE_URL"   || echo "FEHLT SUPABASE_URL"
-    - grep -q "eyJ"          public/index.html && echo "OK SUPABASE_KEY"   || echo "FEHLT SUPABASE_KEY"
-    - test -f public/css/styles.css            && echo "OK CSS"            || echo "FEHLT CSS"
-    - test -f public/js/app.js                 && echo "OK JS"             || echo "FEHLT JS"
+    - grep -q "supabase.co" public/js/app.js && echo "OK SUPABASE_URL"   || echo "FEHLT SUPABASE_URL"
+    - grep -q "eyJ"          public/js/app.js && echo "OK SUPABASE_KEY"   || echo "FEHLT SUPABASE_KEY"
+    - test -f public/css/styles.css           && echo "OK CSS"            || echo "FEHLT CSS"
+    - test -f public/js/app.js                && echo "OK JS"             || echo "FEHLT JS"
 
   artifacts:
     paths:
