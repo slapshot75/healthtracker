@@ -869,6 +869,17 @@ const HISTORY_KEY   = 'purin_tracker_history';
 
 function saveToStorage() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems }));
+}
+
+// Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
+function dbAutoSave(fn) {
+  try {
+    if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL.includes('PLACEHOLDER')) return;
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (!userId) return;
+    fn(userId).catch(e => console.warn('Auto-Sync:', e));
+  } catch(e) {}
 }
 
 function loadFromStorage() {
@@ -904,11 +915,11 @@ function saveDay() {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
     renderHistory();
     switchTab('history');
-    // Flash button
     const btn = document.getElementById('btn-save-day');
     btn.textContent = '✓ Gespeichert';
     setTimeout(() => { btn.textContent = 'Tag speichern'; }, 1500);
   } catch(e) { alert('Speichern fehlgeschlagen – localStorage möglicherweise voll.'); }
+  dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts: getDayTs(), date: today, items: [...trackerItems], totals: tot }));
 }
 
 async function clearHistory() {
@@ -1595,12 +1606,12 @@ function saveWalkDay() {
     localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(history));
     renderWalkHistory();
     showToast('✓ Berechnung gespeichert');
-    // Flash button
     const btn = document.getElementById('btn-save-walk');
     const orig = btn.textContent;
     btn.textContent = '✓ Gespeichert';
     setTimeout(() => btn.textContent = orig, 1500);
   } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
+  dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts: entry.ts, date: entry.date, data: entry }));
 }
 
 async function deleteWalkDay(ts) {
