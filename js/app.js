@@ -932,6 +932,50 @@ renderTracker();
 renderHistory();
 render();
 
+// ── Mitternachts-Reset ──────────────────────────────────────────
+const LAST_DATE_KEY = 'purin_last_date';
+
+function getTodayStr() {
+  return new Date().toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
+
+function checkMidnightReset() {
+  const lastDate = localStorage.getItem(LAST_DATE_KEY);
+  const today    = getTodayStr();
+
+  if (lastDate && lastDate !== today && trackerItems.length > 0) {
+    // Neuer Tag — automatisch speichern und zurücksetzen
+    const date = new Date().toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+    // Datum von gestern für den gespeicherten Tag
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+
+    const tot = calcTotals(trackerItems);
+    const history = getHistory();
+    const exists  = history.some(d => d.date === yesterdayDate);
+    if (!exists) {
+      history.unshift({ ts: Date.now() - 86400000, date: yesterdayDate, items: [...trackerItems], totals: tot });
+      if (history.length > 90) history.splice(90);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+    }
+
+    // Tagesverbrauch zurücksetzen
+    trackerItems = [];
+    saveToStorage();
+    renderTracker();
+    renderHistory();
+    showToast(`Guten Morgen! Neuer Tag – Tagesverbrauch zurückgesetzt ☀`);
+  }
+  localStorage.setItem(LAST_DATE_KEY, today);
+}
+
+// Beim Laden prüfen
+checkMidnightReset();
+
+// Jede Minute prüfen ob Mitternacht war
+setInterval(checkMidnightReset, 60 * 1000);
+
 // ── Verlaufsdiagramm ────────────────────────────────────────────
 let historyChartInstance = null;
 
