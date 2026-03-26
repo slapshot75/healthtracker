@@ -467,23 +467,51 @@ const baseData = [
   {name:"Sushi (Thunfisch)",category:"Sonstiges",purin:120,protein:11.5,kcal:148,carbs:22.5,fiber:0.5,fat:2.5},
 ];
 
-// ── Custom Foods ─────────────────────────────────────────────────
-const CUSTOM_FOODS_KEY = 'purin_custom_foods';
+// ── Foods (Base + Custom) ────────────────────────────────────────
+const CUSTOM_FOODS_KEY   = 'purin_custom_foods';
+const BASE_FOODS_CACHE_KEY = 'purin_base_foods';
 let customFoods = [];
+let currentBaseData = baseData; // überschrieben durch Supabase-Cache oder -Download
 let data = baseData.slice();
 
 function mergeCustomFoods() {
-  data = [...baseData, ...customFoods.map((f, i) => ({ ...f, _custom: true, _customIdx: i }))];
+  data = [...currentBaseData, ...customFoods.map((f, i) => ({ ...f, _custom: true, _customIdx: i }))];
 }
 
 function loadCustomFoodsLocal() {
+  // Custom Foods aus localStorage
   try {
     const stored = localStorage.getItem(CUSTOM_FOODS_KEY);
     customFoods = stored ? JSON.parse(stored) : [];
   } catch(e) { customFoods = []; }
+
+  // Basis-Daten: gecachte Version aus localStorage (falls vorhanden)
+  try {
+    const cached = localStorage.getItem(BASE_FOODS_CACHE_KEY);
+    if (cached) currentBaseData = JSON.parse(cached);
+  } catch(e) {}
+
   mergeCustomFoods();
 }
 loadCustomFoodsLocal();
+
+async function refreshBaseFoodsFromSupabase() {
+  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) return;
+  try {
+    const rows = await supabaseRequest('GET', 'lebensmittel',
+      null, '?user_id=eq.__base__&order=id.asc&limit=600');
+    if (rows && rows.length > 0) {
+      currentBaseData = rows.map(r => ({
+        name: r.name, category: r.category,
+        purin: +r.purin, protein: +r.protein, kcal: +r.kcal,
+        carbs: +r.carbs, fiber: +r.fiber, fat: +r.fat,
+      }));
+      localStorage.setItem(BASE_FOODS_CACHE_KEY, JSON.stringify(currentBaseData));
+      mergeCustomFoods();
+      render();
+    }
+  } catch(e) { console.warn('Basisdaten-Refresh fehlgeschlagen:', e); }
+}
 
 function openAddFoodModal() {
   ['af-name','af-purin','af-kcal','af-protein','af-carbs','af-fat','af-fiber'].forEach(id => {
@@ -1957,3 +1985,6 @@ async function syncDownload() {
     console.error(e);
   }
 }
+
+// Basisdaten im Hintergrund aus Supabase laden (nach Initialisierung aller Konstanten)
+refreshBaseFoodsFromSupabase();
