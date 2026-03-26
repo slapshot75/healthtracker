@@ -1,4 +1,4 @@
-const data = [
+const baseData = [
   // Fleisch
   {name:"Schweinefleisch (mager)",category:"Fleisch",purin:150,protein:22.8,kcal:121,carbs:0.0,fiber:0.0,fat:3.5},
   {name:"Schweinefleisch (fett)",category:"Fleisch",purin:120,protein:15.1,kcal:290,carbs:0.0,fiber:0.0,fat:24.0},
@@ -467,6 +467,91 @@ const data = [
   {name:"Sushi (Thunfisch)",category:"Sonstiges",purin:120,protein:11.5,kcal:148,carbs:22.5,fiber:0.5,fat:2.5},
 ];
 
+// ── Custom Foods ─────────────────────────────────────────────────
+const CUSTOM_FOODS_KEY = 'purin_custom_foods';
+let customFoods = [];
+let data = baseData.slice();
+
+function mergeCustomFoods() {
+  data = [...baseData, ...customFoods.map((f, i) => ({ ...f, _custom: true, _customIdx: i }))];
+}
+
+function loadCustomFoodsLocal() {
+  try {
+    const stored = localStorage.getItem(CUSTOM_FOODS_KEY);
+    customFoods = stored ? JSON.parse(stored) : [];
+  } catch(e) { customFoods = []; }
+  mergeCustomFoods();
+}
+loadCustomFoodsLocal();
+
+function openAddFoodModal() {
+  ['af-name','af-purin','af-kcal','af-protein','af-carbs','af-fat','af-fiber'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('af-category').value = 'Sonstiges';
+  document.getElementById('add-food-modal').classList.add('open');
+  document.getElementById('af-name').focus();
+}
+
+function closeAddFoodModal(e) {
+  if (e && e.target !== document.getElementById('add-food-modal')) return;
+  document.getElementById('add-food-modal').classList.remove('open');
+}
+
+async function saveNewFood() {
+  const name     = document.getElementById('af-name').value.trim();
+  const category = document.getElementById('af-category').value;
+  const purin    = parseFloat(document.getElementById('af-purin').value)   || 0;
+  const kcal     = parseFloat(document.getElementById('af-kcal').value)    || 0;
+  const protein  = parseFloat(document.getElementById('af-protein').value) || 0;
+  const carbs    = parseFloat(document.getElementById('af-carbs').value)   || 0;
+  const fat      = parseFloat(document.getElementById('af-fat').value)     || 0;
+  const fiber    = parseFloat(document.getElementById('af-fiber').value)   || 0;
+
+  if (!name) { showToast('⚠ Bitte Namen eingeben', 2000); return; }
+  if (data.some(d => d.name.toLowerCase() === name.toLowerCase())) {
+    showToast('⚠ Lebensmittel existiert bereits', 2000); return;
+  }
+
+  const food = { name, category, purin, protein, kcal, carbs, fiber, fat };
+  customFoods.push(food);
+  localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+  mergeCustomFoods();
+  document.getElementById('add-food-modal').classList.remove('open');
+  render();
+  showToast(`✓ "${name}" hinzugefügt`);
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      try {
+        await supabaseInsert('lebensmittel', { user_id: userId, name, category, purin, protein, kcal, carbs, fiber, fat });
+      } catch(e) { console.warn('Supabase save failed:', e); }
+    }
+  }
+}
+
+function deleteCustomFood(idx) {
+  const name = customFoods[idx]?.name;
+  if (name === undefined) return;
+  customFoods.splice(idx, 1);
+  localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+  mergeCustomFoods();
+  render();
+  showToast(`✓ "${name}" gelöscht`);
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+      }).catch(e => console.warn('Supabase delete failed:', e));
+    }
+  }
+}
+
 function getLevel(p) {
   if (p < 50) return "low";
   if (p < 150) return "medium";
@@ -564,8 +649,9 @@ function render() {
       const level = getLevel(d.purin);
       const rec = getRec(d.purin);
       const pct = Math.min(100, Math.round((d.purin / maxPurin) * 100));
+      const delBtn = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${d._customIdx})" title="Löschen">×</button>` : '';
       return `<tr>
-        <td style="padding:8px 6px 8px 14px;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${d.name} hinzufügen (100 g)">+</button></td>
+        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${d.name} hinzufügen (100 g)">+</button>${delBtn}</div></td>
         <td style="text-align:center;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;">${i + 1}</td>
         <td style="font-weight:500">${d.name}</td>
         <td><span class="cat-badge">${d.category}</span></td>
@@ -1769,9 +1855,17 @@ async function syncUpload() {
         user_id: userId, ts: Date.now(), items: today,
       });
     }
+    // Upsert custom foods (DELETE all + INSERT)
+    await fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+    });
+    for (const f of customFoods) {
+      await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
+    }
 
     setSyncStatus('ok', `Hochgeladen ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`);
-    showToast(`✓ ${history.length} Tage + ${walkHistory.length} Geh-Einträge hochgeladen`);
+    showToast(`✓ ${history.length} Tage + ${walkHistory.length} Geh-Einträge + ${customFoods.length} Lebensmittel hochgeladen`);
   } catch(e) {
     setSyncStatus('error', 'Fehler');
     showToast('⚠ Upload fehlgeschlagen: ' + e.message, 4000);
@@ -1799,6 +1893,10 @@ async function syncDownload() {
     // Fetch today
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=1`);
+
+    // Fetch custom foods
+    const foodRows = await supabaseRequest('GET', 'lebensmittel',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc`);
 
     // Merge purin history — server wins (neueste Version aus Supabase überschreibt lokal)
     const existingPurin = getHistory();
@@ -1836,15 +1934,23 @@ async function syncDownload() {
       trackerItems = todayRows[0].items || [];
       saveToStorage();
     }
-// test
+
+    // Restore custom foods — server always wins
+    if (foodRows) {
+      customFoods = foodRows.map(r => ({ name: r.name, category: r.category, purin: +r.purin, protein: +r.protein, kcal: +r.kcal, carbs: +r.carbs, fiber: +r.fiber, fat: +r.fat }));
+      localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+      mergeCustomFoods();
+    }
+
     renderHistory();
     renderWalkHistory();
     renderTracker();
+    render();
     if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
     if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
 
     setSyncStatus('ok', `Geladen ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`);
-    showToast(`✓ ${purinAdded} neu + ${purinUpdated} aktualisiert (Purin) · ${walkAdded} Geh-Einträge`);
+    showToast(`✓ ${purinAdded} neu + ${purinUpdated} aktualisiert (Purin) · ${walkAdded} Geh-Einträge · ${customFoods.length} Lebensmittel`);
   } catch(e) {
     setSyncStatus('error', 'Fehler');
     showToast('⚠ Download fehlgeschlagen: ' + e.message, 4000);

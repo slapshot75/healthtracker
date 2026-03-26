@@ -157,6 +157,7 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="search" placeholder="Lebensmittel suchen…" oninput="render()">
     </div>
+    <button onclick="openAddFoodModal()" style="height:38px;padding:0 14px;background:var(--text);color:var(--bg);border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">+ Eigenes</button>
     <select id="category" onchange="render()" style="width:auto;flex-shrink:0;">
       <option value="">Alle Kategorien</option>
       <option value="Fleisch">Fleisch</option>
@@ -211,7 +212,7 @@
     <div id="body-scroll" style="overflow-x:auto; overflow-y:clip;">
       <table id="body-table" style="width:100%;border-collapse:separate;border-spacing:0;font-size:14px;table-layout:fixed;min-width:1400px;">
         <colgroup>
-          <col style="width:48px">
+          <col style="width:64px">
           <col style="width:44px">
           <col style="width:200px">
           <col style="width:130px">
@@ -363,6 +364,63 @@
     </div>
 
   </div><!-- /page-walk -->
+</div>
+
+<!-- Eigenes Lebensmittel hinzufügen Modal -->
+<div class="modal-overlay" id="add-food-modal" onclick="closeAddFoodModal(event)">
+  <div class="modal" style="max-width:480px;width:100%;">
+    <div style="font-size:16px;font-weight:500;margin-bottom:1rem;">Eigenes Lebensmittel hinzufügen</div>
+    <div class="af-grid">
+      <div class="af-field af-full">
+        <label class="af-label">Name *</label>
+        <input type="text" id="af-name" placeholder="z.B. Quinoa (gekocht)" autocomplete="off">
+      </div>
+      <div class="af-field af-full">
+        <label class="af-label">Kategorie</label>
+        <select id="af-category">
+          <option value="Fleisch">Fleisch</option>
+          <option value="Fisch">Fisch &amp; Meeresfrüchte</option>
+          <option value="Innereien">Innereien</option>
+          <option value="Wurst">Wurst &amp; Aufschnitt</option>
+          <option value="Gemüse">Gemüse &amp; Hülsenfrüchte</option>
+          <option value="Getreide">Getreide &amp; Backwaren</option>
+          <option value="Milch">Milch &amp; Eier</option>
+          <option value="Getränke">Getränke</option>
+          <option value="Nüsse">Nüsse &amp; Samen</option>
+          <option value="Obst">Obst</option>
+          <option value="Sonstiges" selected>Sonstiges</option>
+        </select>
+      </div>
+      <div class="af-field">
+        <label class="af-label">Purin (mg/100g) *</label>
+        <input type="number" id="af-purin" min="0" max="9999" step="1" placeholder="0">
+      </div>
+      <div class="af-field">
+        <label class="af-label">kcal</label>
+        <input type="number" id="af-kcal" min="0" max="9999" step="1" placeholder="0">
+      </div>
+      <div class="af-field">
+        <label class="af-label">Eiweiß (g)</label>
+        <input type="number" id="af-protein" min="0" max="999" step="0.1" placeholder="0">
+      </div>
+      <div class="af-field">
+        <label class="af-label">Kohlenhydrate (g)</label>
+        <input type="number" id="af-carbs" min="0" max="999" step="0.1" placeholder="0">
+      </div>
+      <div class="af-field">
+        <label class="af-label">Fett (g)</label>
+        <input type="number" id="af-fat" min="0" max="999" step="0.1" placeholder="0">
+      </div>
+      <div class="af-field">
+        <label class="af-label">Ballaststoffe (g)</label>
+        <input type="number" id="af-fiber" min="0" max="999" step="0.1" placeholder="0">
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:1.25rem;">
+      <button class="btn-cancel" onclick="closeAddFoodModal()">Abbrechen</button>
+      <button class="btn-confirm" onclick="saveNewFood()">Speichern</button>
+    </div>
+  </div>
 </div>
 
 <!-- Gramm-Modal -->

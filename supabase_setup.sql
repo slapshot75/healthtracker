@@ -55,12 +55,28 @@ CREATE INDEX IF NOT EXISTS idx_purin_today_user    ON purin_today   (user_id);
 -- CREATE POLICY "user_owns_data" ON walk_history  FOR ALL USING (true);
 -- CREATE POLICY "user_owns_data" ON purin_today   FOR ALL USING (true);
 
+-- Tabelle: Benutzerdefinierte Lebensmittel
+CREATE TABLE IF NOT EXISTS lebensmittel (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    TEXT      NOT NULL,
+  name       TEXT      NOT NULL,
+  category   TEXT      NOT NULL DEFAULT 'Sonstiges',
+  purin      NUMERIC   NOT NULL DEFAULT 0,
+  protein    NUMERIC   NOT NULL DEFAULT 0,
+  kcal       NUMERIC   NOT NULL DEFAULT 0,
+  carbs      NUMERIC   NOT NULL DEFAULT 0,
+  fiber      NUMERIC   NOT NULL DEFAULT 0,
+  fat        NUMERIC   NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lebensmittel_user ON lebensmittel (user_id);
+
 -- ================================================================
 -- VERIFICATION – diese Queries prüfen ob alles korrekt angelegt ist
 -- ================================================================
 SELECT table_name FROM information_schema.tables
 WHERE table_schema = 'public'
-  AND table_name IN ('purin_history', 'walk_history', 'purin_today');
+  AND table_name IN ('purin_history', 'walk_history', 'purin_today', 'lebensmittel');
 
 -- Erwartete Ausgabe:
 --  table_name
@@ -68,4 +84,5 @@ WHERE table_schema = 'public'
 --  purin_history
 --  purin_today
 --  walk_history
+--  lebensmittel
 -- ================================================================
