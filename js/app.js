@@ -769,6 +769,13 @@ function getHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; }
 }
 
+// Normalisierter Timestamp: immer 00:00:00 des jeweiligen Tages
+function getDayTs(date) {
+  const d = date ? new Date(date) : new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 function saveDay() {
   if (!trackerItems.length) return;
   const history = getHistory();
@@ -776,7 +783,7 @@ function saveDay() {
   const tot = calcTotals(trackerItems);
   // Remove existing entry for today if present
   const filtered = history.filter(d => d.date !== today);
-  filtered.unshift({ date: today, ts: Date.now(), items: [...trackerItems], totals: tot });
+  filtered.unshift({ date: today, ts: getDayTs(), items: [...trackerItems], totals: tot });
   // Keep max 90 days
   if (filtered.length > 90) filtered.splice(90);
   try {
@@ -955,7 +962,10 @@ function checkMidnightReset() {
     const history = getHistory();
     const exists  = history.some(d => d.date === yesterdayDate);
     if (!exists) {
-      history.unshift({ ts: Date.now() - 86400000, date: yesterdayDate, items: [...trackerItems], totals: tot });
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      history.unshift({ ts: yesterday.getTime(), date: yesterdayDate, items: [...trackerItems], totals: tot });
       if (history.length > 90) history.splice(90);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
     }
