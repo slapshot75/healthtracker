@@ -780,6 +780,18 @@ function showSuggestions() {
   const q = document.getElementById("tracker-search").value.trim().toLowerCase();
   const box = document.getElementById("suggestions");
   selectedFood = null;
+
+  // Tabelle mitfiltern
+  const tableSearch = document.getElementById("search");
+  if (tableSearch.value !== document.getElementById("tracker-search").value.trim()) {
+    tableSearch.value = document.getElementById("tracker-search").value.trim();
+    render();
+  }
+
+  // Clear-Button ein-/ausblenden
+  const clearBtn = document.getElementById("tracker-search-clear");
+  if (clearBtn) clearBtn.style.display = q.length > 0 ? "block" : "none";
+
   if (q.length < 1) { box.style.display = "none"; return; }
   const hits = data.filter(d => d.name.toLowerCase().includes(q)).slice(0, 8);
   if (!hits.length) { box.style.display = "none"; return; }
@@ -798,6 +810,17 @@ function selectFood(idx) {
   selectedFood = data[idx];
   document.getElementById("tracker-search").value = selectedFood.name;
   document.getElementById("suggestions").style.display = "none";
+  document.getElementById("search").value = selectedFood.name;
+  render();
+}
+
+function clearTrackerSearch() {
+  document.getElementById("tracker-search").value = "";
+  document.getElementById("suggestions").style.display = "none";
+  const clearBtn = document.getElementById("tracker-search-clear");
+  if (clearBtn) clearBtn.style.display = "none";
+  document.getElementById("search").value = "";
+  render();
 }
 
 function handleKey(e) {

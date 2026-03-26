@@ -59,6 +59,7 @@
       <div class="tracker-add">
         <div class="suggest-wrap">
           <input type="text" id="tracker-search" placeholder="Lebensmittel suchen…" oninput="showSuggestions()" onkeydown="handleKey(event)" autocomplete="off">
+          <button id="tracker-search-clear" onclick="clearTrackerSearch()" title="Suche leeren" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:0;line-height:1;">×</button>
           <div class="suggestions" id="suggestions" style="display:none"></div>
         </div>
         <input type="number" id="tracker-grams" value="100" min="1" max="2000" placeholder="g">
