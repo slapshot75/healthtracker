@@ -1651,6 +1651,84 @@ async function clearWalkHistory() {
   }
 }
 
+// ── Walk-Eintrag bearbeiten ──────────────────────────────────────
+let editWalkTs = null;
+
+function openEditWalkModal(ts) {
+  const day = getWalkHistory().find(d => d.ts === ts);
+  if (!day) return;
+  editWalkTs = ts;
+  document.getElementById('ewalk-date').textContent = day.date;
+  document.getElementById('ew-weight').value   = day.weight;
+  document.getElementById('ew-speed').value    = day.speed;
+  document.getElementById('ew-grade').value    = day.grade;
+  document.getElementById('ew-duration').value = day.duration;
+  document.getElementById('ew-age').value      = day.age;
+  document.querySelector(`input[name="ew-sex"][value="${day.sex}"]`).checked = true;
+  calcWalkEdit();
+  document.getElementById('edit-walk-modal').classList.add('open');
+}
+
+function closeEditWalkModal(e) {
+  if (e && e.target !== document.getElementById('edit-walk-modal')) return;
+  document.getElementById('edit-walk-modal').classList.remove('open');
+  editWalkTs = null;
+}
+
+function calcWalkEdit() {
+  const weight   = parseFloat(document.getElementById('ew-weight').value)   || 75;
+  const speed    = parseFloat(document.getElementById('ew-speed').value)    || 2.5;
+  const grade    = parseFloat(document.getElementById('ew-grade').value)    || 0;
+  const duration = parseFloat(document.getElementById('ew-duration').value) || 60;
+  const age      = parseFloat(document.getElementById('ew-age').value)      || 45;
+  const sex      = document.querySelector('input[name="ew-sex"]:checked')?.value || 'm';
+  const hours    = duration / 60;
+  const distM    = Math.round(speed * hours * 1000);
+  const elevM    = Math.round(distM * Math.tan(Math.atan(grade / 100)));
+  const speedMMin = speed * 1000 / 60;
+  const vo2      = 3.5 + 0.1 * speedMMin + 1.8 * speedMMin * (grade / 100);
+  const met      = vo2 / 3.5;
+  const kcalMin  = (met * weight * 3.5) / 200;
+  const kcalTotal = Math.round(kcalMin * duration);
+  const metR     = Math.round(met * 10) / 10;
+  const hrMax    = 220 - age;
+  const hrRest   = sex === 'm' ? 70 : 74;
+  const intensity = Math.min(0.95, vo2 / 35);
+  const hr       = Math.round(hrRest + intensity * (hrMax - hrRest));
+  const stepLen  = Math.max(0.4, 0.7 - (grade / 100) * 0.8);
+  const steps    = Math.round(distM / stepLen);
+  const water    = Math.round((500 * hours) + (kcalTotal / 100) * 100);
+  document.getElementById('ewalk-results').innerHTML = `
+    <div class="edit-total"><div class="edit-total-label">Strecke</div><div class="edit-total-val">${distM.toLocaleString('de-DE')} m</div></div>
+    <div class="edit-total"><div class="edit-total-label">Höhenmeter</div><div class="edit-total-val">${elevM} m</div></div>
+    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${kcalTotal} kcal</div></div>
+    <div class="edit-total"><div class="edit-total-label">MET</div><div class="edit-total-val">${metR}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Herzfrequenz</div><div class="edit-total-val">${hr} bpm</div></div>
+    <div class="edit-total"><div class="edit-total-label">Schritte</div><div class="edit-total-val">${steps.toLocaleString('de-DE')}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Wasser</div><div class="edit-total-val">${water} ml</div></div>`;
+  return { weight, speed, grade, duration, age, sex, dist: distM, elev: elevM, kcal: kcalTotal, kcalMin: Math.round(kcalMin*10)/10, met: metR, hr, steps, water };
+}
+
+async function saveEditWalkDay() {
+  if (editWalkTs === null) return;
+  const result  = calcWalkEdit();
+  const history = getWalkHistory();
+  const idx     = history.findIndex(d => d.ts === editWalkTs);
+  if (idx === -1) return;
+  const ts = editWalkTs;
+  history[idx] = { ...history[idx], ...result };
+  const entry = history[idx];
+  try {
+    localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(history));
+    renderWalkHistory();
+    renderWalkChart();
+    document.getElementById('edit-walk-modal').classList.remove('open');
+    editWalkTs = null;
+    showToast('✓ Eintrag gespeichert');
+  } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+  dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts, date: entry.date, data: entry }));
+}
+
 function toggleWalkDay(ts) {
   document.getElementById('wday-' + ts)?.classList.toggle('open');
 }
@@ -1675,6 +1753,7 @@ function renderWalkHistory() {
             <span class="walk-history-pill">${d.speed.toFixed(1)} km/h · ${d.grade.toFixed(0)} % · ${d.duration} min</span>
           </div>
         </div>
+        <button class="walk-history-edit" onclick="event.stopPropagation();openEditWalkModal(${d.ts})" title="Bearbeiten">✎</button>
         <button class="walk-history-del" onclick="event.stopPropagation();deleteWalkDay(${d.ts})">×</button>
       </div>
       <div class="walk-history-body" id="wday-${d.ts}">
@@ -2047,10 +2126,13 @@ async function syncDownload() {
 refreshBaseFoodsFromSupabase();
 
 // ── Auto-Refresh: Live-Sync zwischen Browsern ────────────────────
+let _liveRefreshRunning = false;
 async function liveRefresh() {
+  if (_liveRefreshRunning) return;
   if (SUPABASE_URL.includes('PLACEHOLDER')) return;
   const userId = localStorage.getItem(SYNC_USER_KEY);
   if (!userId) return;
+  _liveRefreshRunning = true;
   try {
     // Heutigen Tagesverbrauch holen
     const todayRows = await supabaseRequest('GET', 'purin_today',
@@ -2059,19 +2141,20 @@ async function liveRefresh() {
       const remote = JSON.stringify(todayRows[0].items || []);
       if (remote !== JSON.stringify(trackerItems)) {
         trackerItems = todayRows[0].items || [];
-        saveToStorage();
+        // Nur localStorage schreiben, kein dbAutoSave auslösen
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
         renderTracker();
       }
     }
-    // Purin-Historie holen (nur neue Einträge)
+    // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
     if (purinRows?.length) {
-      const remote = JSON.stringify(purinRows.map(r => r.ts));
-      const local  = JSON.stringify(getHistory().map(d => d.ts));
-      if (remote !== local) {
-        const merged = purinRows.map(r => ({ ts: r.ts, date: r.date, items: r.items, totals: r.totals }));
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+      const remoteTs = JSON.stringify(purinRows.map(r => r.ts));
+      const localTs  = JSON.stringify(getHistory().map(d => d.ts));
+      if (remoteTs !== localTs) {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(
+          purinRows.map(r => ({ ts: r.ts, date: r.date, items: r.items, totals: r.totals }))));
         renderHistory();
         if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
       }
@@ -2080,22 +2163,26 @@ async function liveRefresh() {
     const walkRows = await supabaseRequest('GET', 'walk_history',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=200`);
     if (walkRows?.length) {
-      const remote = JSON.stringify(walkRows.map(r => r.ts));
-      const local  = JSON.stringify(getWalkHistory().map(d => d.ts));
-      if (remote !== local) {
-        const merged = walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
-        localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(merged));
+      const remoteTs = JSON.stringify(walkRows.map(r => r.ts));
+      const localTs  = JSON.stringify(getWalkHistory().map(d => d.ts));
+      if (remoteTs !== localTs) {
+        localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(
+          walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }))));
         renderWalkHistory();
         if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
       }
     }
   } catch(e) { /* silent */ }
+  finally { _liveRefreshRunning = false; }
 }
 
+// Beim Laden sofort holen
+liveRefresh();
+// Bei Fensterfokus (separate Browser-Fenster) sofort aktualisieren
+window.addEventListener('focus', liveRefresh);
 // Bei Tab-Wechsel sofort aktualisieren
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') liveRefresh();
 });
-
-// Alle 30 Sekunden im Hintergrund aktualisieren
-setInterval(liveRefresh, 30000);
+// Alle 15 Sekunden im Hintergrund aktualisieren
+setInterval(liveRefresh, 15000);

@@ -352,6 +352,8 @@
   .walk-history-date  { font-size:14px; font-weight:500; }
   .walk-history-pills { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--text2); }
   .walk-history-pill strong { color:var(--text); font-weight:500; }
+  .walk-history-edit  { background:none; border:none; color:var(--text3); cursor:pointer; font-size:15px; padding:0 4px; font-family:inherit; flex-shrink:0; }
+  .walk-history-edit:hover { color:var(--text); }
   .walk-history-del   { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:0 2px; font-family:inherit; flex-shrink:0; }
   .walk-history-del:hover { color:#E24B4A; }
   .walk-history-body  { display:none; padding:10px 14px 12px; border-top:0.5px solid var(--border); font-size:13px; color:var(--text2); line-height:1.7; }
