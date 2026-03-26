@@ -1836,7 +1836,7 @@ async function syncDownload() {
       trackerItems = todayRows[0].items || [];
       saveToStorage();
     }
-
+// test
     renderHistory();
     renderWalkHistory();
     renderTracker();
