@@ -2045,3 +2045,57 @@ async function syncDownload() {
 
 // Basisdaten im Hintergrund aus Supabase laden (nach Initialisierung aller Konstanten)
 refreshBaseFoodsFromSupabase();
+
+// ── Auto-Refresh: Live-Sync zwischen Browsern ────────────────────
+async function liveRefresh() {
+  if (SUPABASE_URL.includes('PLACEHOLDER')) return;
+  const userId = localStorage.getItem(SYNC_USER_KEY);
+  if (!userId) return;
+  try {
+    // Heutigen Tagesverbrauch holen
+    const todayRows = await supabaseRequest('GET', 'purin_today',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+    if (todayRows?.length) {
+      const remote = JSON.stringify(todayRows[0].items || []);
+      if (remote !== JSON.stringify(trackerItems)) {
+        trackerItems = todayRows[0].items || [];
+        saveToStorage();
+        renderTracker();
+      }
+    }
+    // Purin-Historie holen (nur neue Einträge)
+    const purinRows = await supabaseRequest('GET', 'purin_history',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
+    if (purinRows?.length) {
+      const remote = JSON.stringify(purinRows.map(r => r.ts));
+      const local  = JSON.stringify(getHistory().map(d => d.ts));
+      if (remote !== local) {
+        const merged = purinRows.map(r => ({ ts: r.ts, date: r.date, items: r.items, totals: r.totals }));
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+        renderHistory();
+        if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+      }
+    }
+    // Walk-Historie holen
+    const walkRows = await supabaseRequest('GET', 'walk_history',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=200`);
+    if (walkRows?.length) {
+      const remote = JSON.stringify(walkRows.map(r => r.ts));
+      const local  = JSON.stringify(getWalkHistory().map(d => d.ts));
+      if (remote !== local) {
+        const merged = walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
+        localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(merged));
+        renderWalkHistory();
+        if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+      }
+    }
+  } catch(e) { /* silent */ }
+}
+
+// Bei Tab-Wechsel sofort aktualisieren
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') liveRefresh();
+});
+
+// Alle 30 Sekunden im Hintergrund aktualisieren
+setInterval(liveRefresh, 30000);
