@@ -1,4 +1,4 @@
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #ffffff;
     --bg2: #f5f4f0;
@@ -346,8 +346,6 @@
   .data-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .data-btn { height: 34px; padding: 0 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; border: 0.5px solid var(--border2); background: none; color: var(--text2); transition: color 0.12s, background 0.12s; white-space: nowrap; }
   .data-btn:hover { background: var(--bg2); color: var(--text); }
-  .data-btn.import { background: var(--text); color: var(--bg); border-color: var(--text); }
-  .data-btn.import:hover { opacity: 0.85; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 10px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 9999; white-space: nowrap; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   /* ── Supabase Sync ── */

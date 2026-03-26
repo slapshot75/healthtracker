@@ -25,10 +25,6 @@
       <button class="data-btn" onclick="syncUpload()" title="Daten zu Supabase hochladen">☁ Upload</button>
       <button class="data-btn" onclick="syncDownload()" title="Daten von Supabase laden">☁ Download</button>
       <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Nicht verbunden</span></div>
-      <div style="width:1px;height:20px;background:var(--border2);margin:0 4px;"></div>
-      <button class="data-btn" onclick="exportData()" title="Alle Daten als JSON-Datei herunterladen">⬇ Export</button>
-      <button class="data-btn import" onclick="document.getElementById('import-file').click()" title="JSON-Datei importieren">⬆ Import</button>
-      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
     </div>
   </nav>
 
