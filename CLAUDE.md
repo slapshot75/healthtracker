@@ -54,9 +54,11 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 | `purin_history` | Gespeicherte Tage (Purin-Tracker) | `ts` |
 | `purin_today` | Aktueller Tagesverbrauch | `user_id` |
 | `walk_history` | Gespeicherte Geh-Einheiten | `ts` |
+| `lebensmittel` | Custom Foods + gecachte Basisdaten | `(user_id, name)` |
 
 - RLS ist **deaktiviert** (nur persönliche Nutzung)
 - UPSERT-Strategie: **DELETE + INSERT** (wegen UNIQUE constraints)
+- `lebensmittel`: `user_id = '__base__'` für Basisdaten, eigene `user_id` für Custom Foods
 
 ---
 
@@ -73,9 +75,10 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 ## Wichtige Funktionen in app.js
 
 ### Datenbasis
-- `baseData[]` — ~460 Lebensmittel (Basis) mit Purin, Eiweiß, kcal, KH, Fett, Ballaststoffe
+- `baseData[]` — ~460 Lebensmittel (Basis, hardcodiert als Fallback)
+- `currentBaseData` — aktive Basisdaten (= `baseData` oder Supabase-Cache aus localStorage)
 - `customFoods[]` — benutzerdefinierte Lebensmittel (aus localStorage)
-- `data[]` — aktuell aktives Array = `baseData.slice()` + `customFoods` (via `mergeCustomFoods()`)
+- `data[]` — aktuell aktives Array = `currentBaseData` + `customFoods` (via `mergeCustomFoods()`)
 - `getLevel(p)` — Purin-Stufe (low/medium/high/very-high)
 - `getLevelLabel(l)` / `getLevelOrder(l)` — Label und Sortierrang für Stufen
 - `getRec(p)` — Verzehrempfehlung pro Woche
@@ -85,9 +88,11 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 
 ### Custom Foods
 - `openAddFoodModal()` / `closeAddFoodModal(e)` — Modal für eigene Lebensmittel
-- `loadCustomFoodsLocal()` — Lädt eigene Lebensmittel aus localStorage
-- `mergeCustomFoods()` — Zusammenführen von baseData und customFoods in `data[]`
-- `deleteCustomFood(idx)` — Eigenes Lebensmittel löschen
+- `saveNewFood()` — Neues Lebensmittel speichern (localStorage + Supabase `lebensmittel`)
+- `loadCustomFoodsLocal()` — Lädt Custom Foods + gecachte Basisdaten aus localStorage
+- `refreshBaseFoodsFromSupabase()` — Holt Basisdaten aus Supabase `lebensmittel` (user_id=`__base__`), cacht in localStorage
+- `mergeCustomFoods()` — Zusammenführen von `currentBaseData` und `customFoods` in `data[]`
+- `deleteCustomFood(idx)` — Eigenes Lebensmittel löschen (localStorage + Supabase `lebensmittel`)
 
 ### Tracker
 - `addTrackerItem(food, grams)` — Lebensmittel hinzufügen
@@ -116,10 +121,18 @@ const FAT_LIMIT     = 65;   // g
 - `HISTORY_KEY` = `'purin_tracker_history'`
 - `WALK_HISTORY_KEY` = `'purin_walk_history'`
 - `CUSTOM_FOODS_KEY` = `'purin_custom_foods'`
+- `BASE_FOODS_CACHE_KEY` = `'purin_base_foods'` — Cache für Supabase-Basisdaten
+- `LAST_DATE_KEY` = `'purin_last_date'` — Datum des letzten Öffnens (Midnight-Reset)
+- `SYNC_USER_KEY` = `'purin_sync_user_id'` — Geräte-ID für Supabase-Sync
 
 ### Historie
 - `getHistory()` / `renderHistory()` — Purin-Historie
 - `getWalkHistory()` / `renderWalkHistory()` — Geh-Historie
+- `saveDay()` — Aktuellen Tag in Purin-Historie speichern (localStorage + Supabase)
+- `deleteDay(ts)` — Einzelnen Tag aus Purin-Historie löschen (localStorage + Supabase)
+- `clearHistory()` — Gesamte Purin-Historie löschen
+- `deleteWalkDay(ts)` — Einzelnen Walk-Eintrag löschen (localStorage + Supabase)
+- `clearWalkHistory()` — Gesamte Walk-Historie löschen
 - `getDayTs(date)` — Normalisierter Timestamp (00:00:00 des Tages) → verhindert Duplikate
 - `toggleDay(ts)` — Tag in Purin-Historie ein-/ausklappen
 - `toggleWalkDay(ts)` — Tag in Walk-Historie ein-/ausklappen
@@ -140,6 +153,7 @@ const FAT_LIMIT     = 65;   // g
 - `openEditWalkModal(ts)` — Walk-Eintrag im Edit-Modal öffnen
 - `closeEditWalkModal(e)` — Modal schließen
 - `calcWalkEdit()` — Werte im Edit-Modal neu berechnen
+- `saveEditWalkDay()` — Geänderten Walk-Eintrag speichern (localStorage + Supabase)
 
 ### Supabase Sync
 - `syncUpload()` — Alle lokalen Daten zu Supabase hochladen
@@ -202,7 +216,8 @@ git push origin master
 - **Platzhalter-Check** in `syncUpload/Download` nutzt `.includes('PLACEHOLDER')` statt direktem Vergleich, weil `sed` ALLE Vorkommen ersetzt
 - **ts wird normalisiert** auf `00:00:00` des Tages via `getDayTs()` → verhindert doppelte Einträge in Supabase
 - **Live-Sync** läuft passiv im Hintergrund (kein Polling-Interval) — nur bei Fokuswechsel
-- **`data[]`** ist immer `baseData + customFoods` — nie direkt schreiben, `mergeCustomFoods()` verwenden
+- **`data[]`** ist immer `currentBaseData + customFoods` — nie direkt schreiben, `mergeCustomFoods()` verwenden
+- **`lebensmittel`** Tabelle: `user_id='__base__'` für Basisdaten (read-only), eigene `user_id` für Custom Foods — UNIQUE auf `(user_id, name)`
 
 ---
 
