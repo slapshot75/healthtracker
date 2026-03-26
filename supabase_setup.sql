@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS lebensmittel (
   UNIQUE (user_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_lebensmittel_user ON lebensmittel (user_id);
+-- Constraint nachträglich hinzufügen falls Tabelle bereits ohne ihn existiert:
+ALTER TABLE lebensmittel DROP CONSTRAINT IF EXISTS lebensmittel_user_id_name_key;
+ALTER TABLE lebensmittel ADD CONSTRAINT lebensmittel_user_id_name_key UNIQUE (user_id, name);
 
 -- ================================================================
 -- BASIS-LEBENSMITTEL (455 Einträge) – nur einmalig ausführen!
@@ -548,7 +551,7 @@ BEGIN
     ('__base__','Tiefkühlpizza','Sonstiges',70,9.5,242,30.0,2.2,9.0),
     ('__base__','Sushi (Lachs)','Sonstiges',80,10.0,145,22.0,0.5,3.0),
     ('__base__','Sushi (Thunfisch)','Sonstiges',120,11.5,148,22.5,0.5,2.5)
-    ON CONFLICT (user_id, name) DO NOTHING;
+    ;
   END IF;
 END $$;
 

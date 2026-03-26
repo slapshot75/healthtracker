@@ -911,16 +911,39 @@ function saveDay() {
   } catch(e) { alert('Speichern fehlgeschlagen – localStorage möglicherweise voll.'); }
 }
 
-function clearHistory() {
+async function clearHistory() {
   if (!confirm('Gesamte Tageshistorie löschen?')) return;
   try { localStorage.removeItem(HISTORY_KEY); } catch(e) {}
   renderHistory();
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+        });
+        showToast('✓ Purin-Historie lokal + in DB gelöscht');
+      } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
+    }
+  }
 }
 
-function deleteDay(ts) {
+async function deleteDay(ts) {
   const history = getHistory().filter(d => d.ts !== ts);
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
   renderHistory();
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+      }).catch(e => console.warn('DB-Löschen fehlgeschlagen:', e));
+    }
+  }
 }
 
 function toggleDay(ts) {
@@ -1580,18 +1603,41 @@ function saveWalkDay() {
   } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
 }
 
-function deleteWalkDay(ts) {
+async function deleteWalkDay(ts) {
   const history = getWalkHistory().filter(d => d.ts !== ts);
   try { localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
   renderWalkHistory();
   renderWalkChart();
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+      }).catch(e => console.warn('DB-Löschen fehlgeschlagen:', e));
+    }
+  }
 }
 
-function clearWalkHistory() {
+async function clearWalkHistory() {
   if (!confirm('Gesamte Geh-Historie löschen?')) return;
   try { localStorage.removeItem(WALK_HISTORY_KEY); } catch(e) {}
   renderWalkHistory();
   renderWalkChart();
+
+  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
+    const userId = localStorage.getItem(SYNC_USER_KEY);
+    if (userId) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+        });
+        showToast('✓ Geh-Historie lokal + in DB gelöscht');
+      } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
+    }
+  }
 }
 
 function toggleWalkDay(ts) {
