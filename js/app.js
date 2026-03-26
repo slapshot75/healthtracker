@@ -1019,7 +1019,7 @@ function initDateRange() {
   const toEl   = document.getElementById('chart-to');
   if (!fromEl || !toEl) return;
   if (!fromEl.value) fromEl.value = toISO(dates[0]);
-  if (!toEl.value)   toEl.value   = toISO(dates[dates.length - 1]);
+  if (!toEl.value)   toEl.value   = toISO(new Date());
 }
 
 function resetDateRange() {
@@ -1029,7 +1029,7 @@ function resetDateRange() {
   const fromEl = document.getElementById('chart-from');
   const toEl   = document.getElementById('chart-to');
   if (fromEl) fromEl.value = toISO(dates[0]);
-  if (toEl)   toEl.value   = toISO(dates[dates.length - 1]);
+  if (toEl)   toEl.value   = toISO(new Date());
   renderChart();
 }
 
@@ -1531,7 +1531,7 @@ function initWalkDateRange() {
   const fromEl = document.getElementById('wchart-from');
   const toEl   = document.getElementById('wchart-to');
   if (fromEl && !fromEl.value) fromEl.value = toISO(dates[0]);
-  if (toEl   && !toEl.value)   toEl.value   = toISO(dates[dates.length - 1]);
+  if (toEl   && !toEl.value)   toEl.value   = toISO(new Date());
 }
 
 function resetWalkDateRange() {
@@ -1541,7 +1541,7 @@ function resetWalkDateRange() {
   const fromEl = document.getElementById('wchart-from');
   const toEl   = document.getElementById('wchart-to');
   if (fromEl) fromEl.value = toISO(dates[0]);
-  if (toEl)   toEl.value   = toISO(dates[dates.length - 1]);
+  if (toEl)   toEl.value   = toISO(new Date());
   renderWalkChart();
 }
 
