@@ -2222,6 +2222,25 @@ async function liveRefresh() {
         if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
       }
     }
+    // Custom Foods synchronisieren
+    const foodRows = await supabaseRequest('GET', 'lebensmittel',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&order=id.asc`);
+    if (foodRows?.length) {
+      // Remote hat Daten → lokal übernehmen wenn unterschiedlich
+      const remoteNames = JSON.stringify(foodRows.map(r => r.name).sort());
+      const localNames  = JSON.stringify(customFoods.map(f => f.name).sort());
+      if (remoteNames !== localNames) {
+        customFoods = foodRows.map(r => ({ name: r.name, category: r.category, purin: +r.purin, protein: +r.protein, kcal: +r.kcal, carbs: +r.carbs, fiber: +r.fiber, fat: +r.fat }));
+        localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+        mergeCustomFoods();
+        render();
+      }
+    } else if (foodRows !== null && customFoods.length > 0) {
+      // Remote leer, lokal gefüllt → lokal zu Supabase hochladen (Initialzustand)
+      for (const f of customFoods) {
+        await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
+      }
+    }
   } catch(e) { /* silent */ }
   finally { _liveRefreshRunning = false; }
 }
