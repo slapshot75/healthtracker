@@ -1927,10 +1927,15 @@ const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
 const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';
 const SYNC_USER_KEY = 'purin_sync_user_id';
 
-// Restore saved user-id
+// Restore saved user-id und bei Änderung sofort speichern
 (function() {
+  const el = document.getElementById('sync-user-id');
   const saved = localStorage.getItem(SYNC_USER_KEY);
-  if (saved) document.getElementById('sync-user-id').value = saved;
+  if (saved) el.value = saved;
+  el.addEventListener('change', () => {
+    const id = el.value.trim();
+    if (id) localStorage.setItem(SYNC_USER_KEY, id);
+  });
 })();
 
 function getSyncUserId() {
