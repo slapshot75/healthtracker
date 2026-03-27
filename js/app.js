@@ -2222,6 +2222,19 @@ async function liveRefresh() {
         if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
       }
     }
+    // Custom Foods holen
+    const foodRows = await supabaseRequest('GET', 'lebensmittel',
+      null, `?user_id=eq.${encodeURIComponent(userId)}&order=id.asc`);
+    if (foodRows) {
+      const remoteNames = JSON.stringify(foodRows.map(r => r.name).sort());
+      const localNames  = JSON.stringify(customFoods.map(f => f.name).sort());
+      if (remoteNames !== localNames) {
+        customFoods = foodRows.map(r => ({ name: r.name, category: r.category, purin: +r.purin, protein: +r.protein, kcal: +r.kcal, carbs: +r.carbs, fiber: +r.fiber, fat: +r.fat }));
+        localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+        mergeCustomFoods();
+        render();
+      }
+    }
   } catch(e) { /* silent */ }
   finally { _liveRefreshRunning = false; }
 }
