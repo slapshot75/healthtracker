@@ -2174,7 +2174,7 @@ async function liveRefresh() {
       const todayMidnight = new Date();
       todayMidnight.setHours(0, 0, 0, 0);
       if (todayRows[0].ts >= todayMidnight.getTime()) {
-        // Remote-Daten von heute → wiederherstellen
+        // Remote-Daten von heute → ggf. übernehmen
         const remote = JSON.stringify(todayRows[0].items || []);
         if (remote !== JSON.stringify(trackerItems)) {
           trackerItems = todayRows[0].items || [];
@@ -2183,18 +2183,17 @@ async function liveRefresh() {
           renderTracker();
         }
       } else {
-        // Remote-Daten von gestern (Supabase-Schreib nach Reset noch nicht fertig oder nie aktualisiert).
-        // ITEMS_DATE_KEY auf gestern setzen falls noch nicht gesetzt, damit checkMidnightReset greift.
-        if (!localStorage.getItem(ITEMS_DATE_KEY) && trackerItems.length > 0) {
+        // Remote-Daten von gestern. Nur wenn lokal == remote (identische veraltete Items):
+        // Broken State — ITEMS_DATE_KEY auf gestern setzen damit setInterval-checkMidnightReset greift.
+        // Wenn lokal != remote wurden Items heute schon geändert → nicht anfassen.
+        if (trackerItems.length > 0 &&
+            JSON.stringify(todayRows[0].items || []) === JSON.stringify(trackerItems)) {
           const staleDate = new Date(todayRows[0].ts)
             .toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
           try { localStorage.setItem(ITEMS_DATE_KEY, staleDate); } catch(e) {}
         }
       }
     }
-    // Nach liveRefresh nochmals prüfen — fängt den Fall ab, wo ITEMS_DATE_KEY gerade auf gestern
-    // gesetzt wurde (z.B. nach altem liveRefresh-Bug der Items zurückgespielt hatte)
-    checkMidnightReset();
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
