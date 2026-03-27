@@ -887,11 +887,13 @@ function switchTab(name) {
 }
 
 // ── localStorage persistence ────────────────────────────────────
-const STORAGE_KEY   = 'purin_tracker_today';
-const HISTORY_KEY   = 'purin_tracker_history';
+const STORAGE_KEY      = 'purin_tracker_today';
+const HISTORY_KEY      = 'purin_tracker_history';
+const ITEMS_DATE_KEY   = 'purin_tracker_items_date'; // wann wurden items zuletzt korrekt via saveToStorage geschrieben
 
 function saveToStorage() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+  try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
   dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems }));
 }
 
@@ -1118,13 +1120,19 @@ function getTodayStr() {
 }
 
 function checkMidnightReset() {
-  const lastDate = localStorage.getItem(LAST_DATE_KEY);
-  const today    = getTodayStr();
+  const lastDate  = localStorage.getItem(LAST_DATE_KEY);
+  const itemsDate = localStorage.getItem(ITEMS_DATE_KEY);
+  const today     = getTodayStr();
 
-  if (lastDate && lastDate !== today && trackerItems.length > 0) {
-    // Neuer Tag — automatisch speichern und zurücksetzen
-    const date = new Date().toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
-    // Datum von gestern für den gespeicherten Tag
+  // Reset nötig wenn Items von einem vorherigen Tag stammen.
+  // itemsDate ist zuverlässiger als lastDate — lastDate kann schon auf "heute" stehen
+  // obwohl liveRefresh danach gestrige Items zurückgespielt hat.
+  const needsReset = trackerItems.length > 0 && (
+    (itemsDate != null && itemsDate !== today) ||
+    (itemsDate == null && lastDate && lastDate !== today)
+  );
+
+  if (needsReset) {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDate = yesterday.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
@@ -1133,17 +1141,15 @@ function checkMidnightReset() {
     const history = getHistory();
     const exists  = history.some(d => d.date === yesterdayDate);
     if (!exists) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
-      history.unshift({ ts: yesterday.getTime(), date: yesterdayDate, items: [...trackerItems], totals: tot });
+      const yTs = new Date(yesterday);
+      yTs.setHours(0, 0, 0, 0);
+      history.unshift({ ts: yTs.getTime(), date: yesterdayDate, items: [...trackerItems], totals: tot });
       if (history.length > 90) history.splice(90);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
     }
 
-    // Tagesverbrauch zurücksetzen
     trackerItems = [];
-    saveToStorage();
+    saveToStorage(); // setzt auch ITEMS_DATE_KEY = heute
     renderTracker();
     renderHistory();
     showToast(`Guten Morgen! Neuer Tag – Tagesverbrauch zurückgesetzt ☀`);
@@ -2165,21 +2171,30 @@ async function liveRefresh() {
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
     if (todayRows?.length) {
-      // Nur wiederherstellen wenn Remote-Daten von heute sind (ts >= heutiges Mitternacht)
-      // Verhindert Race Condition: checkMidnightReset setzt lokal leer, aber Supabase-Schreib
-      // noch nicht abgeschlossen → liveRefresh würde sonst gestrige Daten zurückspielen
       const todayMidnight = new Date();
       todayMidnight.setHours(0, 0, 0, 0);
       if (todayRows[0].ts >= todayMidnight.getTime()) {
+        // Remote-Daten von heute → wiederherstellen
         const remote = JSON.stringify(todayRows[0].items || []);
         if (remote !== JSON.stringify(trackerItems)) {
           trackerItems = todayRows[0].items || [];
-          // Nur localStorage schreiben, kein dbAutoSave auslösen
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+          try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
           renderTracker();
+        }
+      } else {
+        // Remote-Daten von gestern (Supabase-Schreib nach Reset noch nicht fertig oder nie aktualisiert).
+        // ITEMS_DATE_KEY auf gestern setzen falls noch nicht gesetzt, damit checkMidnightReset greift.
+        if (!localStorage.getItem(ITEMS_DATE_KEY) && trackerItems.length > 0) {
+          const staleDate = new Date(todayRows[0].ts)
+            .toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+          try { localStorage.setItem(ITEMS_DATE_KEY, staleDate); } catch(e) {}
         }
       }
     }
+    // Nach liveRefresh nochmals prüfen — fängt den Fall ab, wo ITEMS_DATE_KEY gerade auf gestern
+    // gesetzt wurde (z.B. nach altem liveRefresh-Bug der Items zurückgespielt hatte)
+    checkMidnightReset();
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
       null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
