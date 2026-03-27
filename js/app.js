@@ -2116,10 +2116,14 @@ async function syncDownload() {
     if (mergedWalk.length > 200) mergedWalk.splice(200);
     localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(mergedWalk));
 
-    // Restore today — server always wins
+    // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
-      trackerItems = todayRows[0].items || [];
-      saveToStorage();
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
+      if (todayRows[0].ts >= todayMidnight.getTime()) {
+        trackerItems = todayRows[0].items || [];
+        saveToStorage();
+      }
     }
 
     // Restore custom foods — server always wins
@@ -2161,12 +2165,19 @@ async function liveRefresh() {
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
     if (todayRows?.length) {
-      const remote = JSON.stringify(todayRows[0].items || []);
-      if (remote !== JSON.stringify(trackerItems)) {
-        trackerItems = todayRows[0].items || [];
-        // Nur localStorage schreiben, kein dbAutoSave auslösen
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
-        renderTracker();
+      // Nur wiederherstellen wenn Remote-Daten von heute sind (ts >= heutiges Mitternacht)
+      // Verhindert Race Condition: checkMidnightReset setzt lokal leer, aber Supabase-Schreib
+      // noch nicht abgeschlossen → liveRefresh würde sonst gestrige Daten zurückspielen
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
+      if (todayRows[0].ts >= todayMidnight.getTime()) {
+        const remote = JSON.stringify(todayRows[0].items || []);
+        if (remote !== JSON.stringify(trackerItems)) {
+          trackerItems = todayRows[0].items || [];
+          // Nur localStorage schreiben, kein dbAutoSave auslösen
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+          renderTracker();
+        }
       }
     }
     // Purin-Historie holen
