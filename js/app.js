@@ -2181,28 +2181,20 @@ async function liveRefresh() {
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
     if (todayRows?.length) {
+      // Remote-Daten immer übernehmen wenn sie sich unterscheiden (Cross-Browser-Sync)
+      const remote = JSON.stringify(todayRows[0].items || []);
+      if (remote !== JSON.stringify(trackerItems)) {
+        trackerItems = todayRows[0].items || [];
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+        renderTracker();
+      }
+      // ITEMS_DATE_KEY setzen: heute oder veraltet — checkMidnightReset entscheidet dann ob Reset nötig
       const todayMidnight = new Date();
       todayMidnight.setHours(0, 0, 0, 0);
-      if (todayRows[0].ts >= todayMidnight.getTime()) {
-        // Remote-Daten von heute → ggf. übernehmen
-        const remote = JSON.stringify(todayRows[0].items || []);
-        if (remote !== JSON.stringify(trackerItems)) {
-          trackerItems = todayRows[0].items || [];
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
-          try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-          renderTracker();
-        }
-      } else {
-        // Remote-Daten von gestern. Nur wenn lokal == remote (identische veraltete Items):
-        // Broken State — ITEMS_DATE_KEY auf gestern setzen damit setInterval-checkMidnightReset greift.
-        // Wenn lokal != remote wurden Items heute schon geändert → nicht anfassen.
-        if (trackerItems.length > 0 &&
-            JSON.stringify(todayRows[0].items || []) === JSON.stringify(trackerItems)) {
-          const staleDate = new Date(todayRows[0].ts)
-            .toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
-          try { localStorage.setItem(ITEMS_DATE_KEY, staleDate); } catch(e) {}
-        }
-      }
+      const dateKey = todayRows[0].ts >= todayMidnight.getTime()
+        ? getTodayStr()
+        : new Date(todayRows[0].ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+      try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
     }
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
