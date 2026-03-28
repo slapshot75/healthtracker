@@ -677,7 +677,7 @@ function render() {
   const cat = document.getElementById("category").value;
   const lev = document.getElementById("level").value;
   const recFilter = document.getElementById("rec").value;
-  const maxPurin = Math.max(...data.map(d => d.purin));
+  const maxPurin = 180;
 
   let rows = data.filter(d => {
     const level = getLevel(d.purin);
