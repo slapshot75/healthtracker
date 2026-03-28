@@ -755,7 +755,7 @@ function render() {
 // ── Tagesverbrauchsrechner ──────────────────────────────────────
 let trackerItems = [];
 let selectedFood = null;
-const PURIN_LIMIT   = 500;
+const PURIN_LIMIT   = 180;
 const KCAL_LIMIT    = 2000;
 const PROTEIN_LIMIT = 75;
 const CARBS_LIMIT   = 250;
