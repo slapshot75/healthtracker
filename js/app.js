@@ -473,6 +473,7 @@ const BASE_FOODS_CACHE_KEY = 'purin_base_foods';
 let customFoods = [];
 let currentBaseData = baseData; // überschrieben durch Supabase-Cache oder -Download
 let data = baseData.slice();
+let _editFoodIdx = null; // null = neu anlegen, number = bestehendes bearbeiten
 
 function mergeCustomFoods() {
   data = [...currentBaseData, ...customFoods.map((f, i) => ({ ...f, _custom: true, _customIdx: i }))];
@@ -514,10 +515,29 @@ async function refreshBaseFoodsFromSupabase() {
 }
 
 function openAddFoodModal() {
+  _editFoodIdx = null;
   ['af-name','af-purin','af-kcal','af-protein','af-carbs','af-fat','af-fiber'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('af-category').value = 'Sonstiges';
+  document.getElementById('af-modal-title').textContent = 'Eigenes Lebensmittel hinzufügen';
+  document.getElementById('add-food-modal').classList.add('open');
+  document.getElementById('af-name').focus();
+}
+
+function openEditFoodModal(idx) {
+  const f = customFoods[idx];
+  if (!f) return;
+  _editFoodIdx = idx;
+  document.getElementById('af-name').value    = f.name;
+  document.getElementById('af-category').value = f.category || 'Sonstiges';
+  document.getElementById('af-purin').value   = f.purin    ?? '';
+  document.getElementById('af-kcal').value    = f.kcal     ?? '';
+  document.getElementById('af-protein').value = f.protein  ?? '';
+  document.getElementById('af-carbs').value   = f.carbs    ?? '';
+  document.getElementById('af-fat').value     = f.fat      ?? '';
+  document.getElementById('af-fiber').value   = f.fiber    ?? '';
+  document.getElementById('af-modal-title').textContent = 'Lebensmittel bearbeiten';
   document.getElementById('add-food-modal').classList.add('open');
   document.getElementById('af-name').focus();
 }
@@ -538,22 +558,39 @@ async function saveNewFood() {
   const fiber    = parseFloat(document.getElementById('af-fiber').value)   || 0;
 
   if (!name) { showToast('⚠ Bitte Namen eingeben', 2000); return; }
-  if (data.some(d => d.name.toLowerCase() === name.toLowerCase())) {
+
+  const isEdit = _editFoodIdx !== null;
+  const oldName = isEdit ? customFoods[_editFoodIdx].name : null;
+
+  // Duplikat-Prüfung: erlaubt gleichen Namen nur wenn es das gleiche Item ist
+  if (data.some(d => d.name.toLowerCase() === name.toLowerCase() && (!isEdit || d.name !== oldName))) {
     showToast('⚠ Lebensmittel existiert bereits', 2000); return;
   }
 
   const food = { name, category, purin, protein, kcal, carbs, fiber, fat };
-  customFoods.push(food);
+
+  if (isEdit) {
+    customFoods[_editFoodIdx] = food;
+  } else {
+    customFoods.push(food);
+  }
   localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
   mergeCustomFoods();
   document.getElementById('add-food-modal').classList.remove('open');
   render();
-  showToast(`✓ "${name}" hinzugefügt`);
+  showToast(isEdit ? `✓ "${name}" aktualisiert` : `✓ "${name}" hinzugefügt`);
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
     const userId = localStorage.getItem(SYNC_USER_KEY);
     if (userId) {
       try {
+        if (isEdit && oldName) {
+          // Alten Eintrag löschen, neuen einfügen (Name könnte geändert worden sein)
+          await fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(oldName)}`, {
+            method: 'DELETE',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+          });
+        }
         await supabaseInsert('lebensmittel', { user_id: userId, name, category, purin, protein, kcal, carbs, fiber, fat });
       } catch(e) { console.warn('Supabase save failed:', e); }
     }
@@ -677,9 +714,10 @@ function render() {
       const level = getLevel(d.purin);
       const rec = getRec(d.purin);
       const pct = Math.min(100, Math.round((d.purin / maxPurin) * 100));
-      const delBtn = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${d._customIdx})" title="Löschen">×</button>` : '';
+      const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${d._customIdx})" title="Bearbeiten">✎</button>` : '';
+      const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${d._customIdx})" title="Löschen">×</button>` : '';
       return `<tr>
-        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${d.name} hinzufügen (100 g)">+</button>${delBtn}</div></td>
+        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${d.name} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
         <td style="text-align:center;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;">${i + 1}</td>
         <td style="font-weight:500">${d.name}</td>
         <td><span class="cat-badge">${d.category}</span></td>
