@@ -1179,11 +1179,11 @@ function checkMidnightReset() {
     const history = getHistory();
     const exists  = history.some(d => d.date === yesterdayDate);
     if (!exists) {
-      const yTs = new Date(yesterday);
-      yTs.setHours(0, 0, 0, 0);
-      history.unshift({ ts: yTs.getTime(), date: yesterdayDate, items: [...trackerItems], totals: tot });
+      const yTs = getDayTs(yesterday);
+      history.unshift({ ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot });
       if (history.length > 90) history.splice(90);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+      dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot }));
     }
 
     trackerItems = [];
