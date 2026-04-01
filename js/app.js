@@ -1224,7 +1224,7 @@ setInterval(checkMidnightReset, 60 * 1000);
 let historyChartInstance = null;
 
 const METRIC_CONFIG = {
-  purin:   { label: 'Purin (mg)',         color: '#E24B4A', limit: PURIN_LIMIT,   unit: 'mg' },
+  purin:   { label: 'Purin (mg)',         color: '#E24B4A', get limit() { return PURIN_LIMIT; }, unit: 'mg' },
   kcal:    { label: 'Kalorien (kcal)',    color: '#378ADD', limit: KCAL_LIMIT,    unit: 'kcal' },
   protein: { label: 'Eiweiß (g)',         color: '#639922', limit: PROTEIN_LIMIT, unit: 'g' },
   carbs:   { label: 'Kohlenhydrate (g)',  color: '#EF9F27', limit: CARBS_LIMIT,   unit: 'g' },
