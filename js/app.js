@@ -929,11 +929,13 @@ const STORAGE_KEY      = 'purin_tracker_today';
 const HISTORY_KEY      = 'purin_tracker_history';
 const ITEMS_DATE_KEY   = 'purin_tracker_items_date'; // wann wurden items zuletzt korrekt via saveToStorage geschrieben
 
+let _lastSavedTs = 0; // In-Memory: jeder Tab hat eigenen Stand, kein localStorage-Konflikt
+
 function saveToStorage() {
   const ts = Date.now();
+  _lastSavedTs = ts;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
   dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } }));
 }
 
@@ -2216,12 +2218,11 @@ async function liveRefresh() {
       null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
     if (todayRows?.length) {
       const row = todayRows[0];
-      const localTs = parseInt(localStorage.getItem('purin_today_ts') || '0', 10);
-      // Nur übernehmen wenn DB-Timestamp neuer als zuletzt angewandter Timestamp
-      if (row.ts > localTs) {
+      // Nur übernehmen wenn DB-Timestamp neuer als letzter eigener Write dieses Tabs
+      if (row.ts > _lastSavedTs) {
         trackerItems = row.items || [];
+        _lastSavedTs = row.ts;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
-        try { localStorage.setItem('purin_today_ts', row.ts); } catch(e) {}
         // ITEMS_DATE_KEY setzen für Midnight-Reset
         const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
         const dateKey = row.ts >= todayMidnight.getTime()
@@ -2242,7 +2243,7 @@ async function liveRefresh() {
       // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
       const ts = Date.now();
       await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
-      try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
+      _lastSavedTs = ts;
     }
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
