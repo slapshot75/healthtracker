@@ -2246,15 +2246,14 @@ async function liveRefresh() {
           ? getTodayStr()
           : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
         try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
-        renderTracker();
-      }
-      // Purin-Limit aus Settings laden
-      const remoteLimit = row.settings?.purin_limit;
-      if (remoteLimit && remoteLimit !== PURIN_LIMIT) {
-        PURIN_LIMIT = remoteLimit;
-        localStorage.setItem('purin_limit_custom', remoteLimit);
-        const inp = document.getElementById('purin-limit-input');
-        if (inp) inp.value = remoteLimit;
+        // Purin-Limit aus Settings laden – nur wenn DB-Eintrag neuer
+        const remoteLimit = row.settings?.purin_limit;
+        if (remoteLimit && remoteLimit !== PURIN_LIMIT) {
+          PURIN_LIMIT = remoteLimit;
+          localStorage.setItem('purin_limit_custom', remoteLimit);
+          const inp = document.getElementById('purin-limit-input');
+          if (inp) inp.value = remoteLimit;
+        }
         renderTracker();
       }
     } else if (todayRows !== null && trackerItems.length > 0) {
