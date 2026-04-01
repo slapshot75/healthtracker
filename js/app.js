@@ -930,9 +930,11 @@ const HISTORY_KEY      = 'purin_tracker_history';
 const ITEMS_DATE_KEY   = 'purin_tracker_items_date'; // wann wurden items zuletzt korrekt via saveToStorage geschrieben
 
 function saveToStorage() {
+  const ts = Date.now();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems }));
+  try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
+  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems }));
 }
 
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
@@ -2226,15 +2228,23 @@ async function liveRefresh() {
     const todayRows = await supabaseRequest('GET', 'purin_today',
       null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
     if (todayRows?.length) {
-      // Remote-Daten immer übernehmen wenn sie sich unterscheiden (Cross-Browser-Sync)
-      const remote = JSON.stringify(todayRows[0].items || []);
-      if (remote !== JSON.stringify(trackerItems)) {
-        trackerItems = todayRows[0].items || [];
+      const row = todayRows[0];
+      const localTs = parseInt(localStorage.getItem('purin_today_ts') || '0', 10);
+      // Nur übernehmen wenn DB-Timestamp neuer als zuletzt angewandter Timestamp
+      if (row.ts > localTs) {
+        trackerItems = row.items || [];
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+        try { localStorage.setItem('purin_today_ts', row.ts); } catch(e) {}
+        // ITEMS_DATE_KEY setzen für Midnight-Reset
+        const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+        const dateKey = row.ts >= todayMidnight.getTime()
+          ? getTodayStr()
+          : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+        try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
         renderTracker();
       }
       // Purin-Limit aus Settings laden
-      const remoteLimit = todayRows[0].settings?.purin_limit;
+      const remoteLimit = row.settings?.purin_limit;
       if (remoteLimit && remoteLimit !== PURIN_LIMIT) {
         PURIN_LIMIT = remoteLimit;
         localStorage.setItem('purin_limit_custom', remoteLimit);
@@ -2242,16 +2252,11 @@ async function liveRefresh() {
         if (inp) inp.value = remoteLimit;
         renderTracker();
       }
-      // ITEMS_DATE_KEY setzen: heute oder veraltet — checkMidnightReset entscheidet dann ob Reset nötig
-      const todayMidnight = new Date();
-      todayMidnight.setHours(0, 0, 0, 0);
-      const dateKey = todayRows[0].ts >= todayMidnight.getTime()
-        ? getTodayStr()
-        : new Date(todayRows[0].ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
-      try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
     } else if (todayRows !== null && trackerItems.length > 0) {
       // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
-      await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems });
+      const ts = Date.now();
+      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems });
+      try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
     }
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
