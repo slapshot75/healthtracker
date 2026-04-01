@@ -942,8 +942,10 @@ function dbAutoSave(fn) {
   try {
     if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL.includes('PLACEHOLDER')) return;
     const userId = FIXED_USER_ID;
-    if (!userId) return;
-    fn(userId).catch(e => console.warn('Auto-Sync:', e));
+    fn(userId).catch(e => {
+      console.warn('Auto-Sync:', e);
+      setSyncStatus('error', 'Schreibfehler: ' + e.message);
+    });
   } catch(e) {}
 }
 
@@ -2313,7 +2315,11 @@ async function liveRefresh() {
         await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
       }
     }
-  } catch(e) { /* silent */ }
+    setSyncStatus('ok', `Sync ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`);
+  } catch(e) {
+    console.warn('liveRefresh:', e);
+    setSyncStatus('error', 'Lesefehler: ' + e.message);
+  }
   finally { _liveRefreshRunning = false; }
 }
 
