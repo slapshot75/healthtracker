@@ -581,7 +581,7 @@ async function saveNewFood() {
   showToast(isEdit ? `✓ "${name}" aktualisiert` : `✓ "${name}" hinzugefügt`);
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       try {
         if (isEdit && oldName) {
@@ -607,7 +607,7 @@ function deleteCustomFood(idx) {
   showToast(`✓ "${name}" gelöscht`);
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(name)}`, {
         method: 'DELETE',
@@ -939,7 +939,7 @@ function saveToStorage() {
 function dbAutoSave(fn) {
   try {
     if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL.includes('PLACEHOLDER')) return;
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (!userId) return;
     fn(userId).catch(e => console.warn('Auto-Sync:', e));
   } catch(e) {}
@@ -991,7 +991,7 @@ async function clearHistory() {
   renderHistory();
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}`, {
@@ -1010,7 +1010,7 @@ async function deleteDay(ts) {
   renderHistory();
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
         method: 'DELETE',
@@ -1151,7 +1151,7 @@ function setPurinLimit(val) {
 
 async function savePurinLimitToDb() {
   if (SUPABASE_URL.includes('PLACEHOLDER')) return;
-  const userId = localStorage.getItem(SYNC_USER_KEY);
+  const userId = FIXED_USER_ID;
   if (!userId) return;
   try {
     await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
@@ -1714,7 +1714,7 @@ async function deleteWalkDay(ts) {
   renderWalkChart();
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
         method: 'DELETE',
@@ -1731,7 +1731,7 @@ async function clearWalkHistory() {
   renderWalkChart();
 
   if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = localStorage.getItem(SYNC_USER_KEY);
+    const userId = FIXED_USER_ID;
     if (userId) {
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}`, {
@@ -1990,29 +1990,10 @@ function showToast(msg, duration = 2500) {
 const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
 const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';
 const SYNC_USER_KEY = 'purin_sync_user_id';
-
-// Auto-ID: beim ersten Start UUID generieren, danach immer dieselbe verwenden.
-// Manuell überschreibbar für Geräte-übergreifenden Sync.
-(function() {
-  const el = document.getElementById('sync-user-id');
-  let saved = localStorage.getItem(SYNC_USER_KEY);
-  if (!saved) {
-    saved = crypto.randomUUID();
-    localStorage.setItem(SYNC_USER_KEY, saved);
-  }
-  el.value = saved;
-  el.addEventListener('change', () => {
-    const id = el.value.trim();
-    if (id) { localStorage.setItem(SYNC_USER_KEY, id); liveRefresh(); }
-  });
-})();
+const FIXED_USER_ID = 'mario';
 
 function getSyncUserId() {
-  const el = document.getElementById('sync-user-id');
-  const id = el.value.trim();
-  if (!id) { showToast('⚠ Bitte zuerst eine Geräte-ID eingeben', 3000); return null; }
-  localStorage.setItem(SYNC_USER_KEY, id);
-  return id;
+  return FIXED_USER_ID;
 }
 
 function setSyncStatus(state, text) {
@@ -2237,7 +2218,7 @@ let _liveRefreshRunning = false;
 async function liveRefresh() {
   if (_liveRefreshRunning) return;
   if (SUPABASE_URL.includes('PLACEHOLDER')) return;
-  const userId = localStorage.getItem(SYNC_USER_KEY);
+  const userId = FIXED_USER_ID;
   if (!userId) return;
   _liveRefreshRunning = true;
   try {
