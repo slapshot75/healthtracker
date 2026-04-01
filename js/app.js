@@ -1156,7 +1156,13 @@ async function savePurinLimitToDb() {
   try {
     await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
     showToast('✓ Purin-Limit gespeichert', 1500);
-  } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
+  } catch(e) {
+    // Fallback: settings-Spalte existiert noch nicht → ohne settings speichern
+    try {
+      await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems });
+      showToast('✓ Gespeichert (Limit nur lokal – SQL-Migration ausstehend)', 3000);
+    } catch(e2) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
+  }
 }
 
 // ── Init ────────────────────────────────────────────────────────
