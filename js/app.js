@@ -755,7 +755,7 @@ function render() {
 // ── Tagesverbrauchsrechner ──────────────────────────────────────
 let trackerItems = [];
 let selectedFood = null;
-const PURIN_LIMIT   = 180;
+let PURIN_LIMIT   = parseInt(localStorage.getItem('purin_limit_custom') || '180', 10);
 const KCAL_LIMIT    = 2000;
 const PROTEIN_LIMIT = 75;
 const CARBS_LIMIT   = 250;
@@ -1141,11 +1141,21 @@ function renderTracker() {
   set("fat",     tot.fat,     "g",    FAT_LIMIT);
 }
 
+function setPurinLimit(val) {
+  const n = parseInt(val, 10);
+  if (!n || n < 50) return;
+  PURIN_LIMIT = n;
+  localStorage.setItem('purin_limit_custom', n);
+  renderTracker();
+}
+
 // ── Init ────────────────────────────────────────────────────────
 const _origRender = render;
 render = function() { _origRender(); };
 
 loadFromStorage();
+const _limitInput = document.getElementById('purin-limit-input');
+if (_limitInput) _limitInput.value = PURIN_LIMIT;
 renderTracker();
 renderHistory();
 render();
