@@ -1150,26 +1150,8 @@ function setPurinLimit(val) {
   if (!n || n < 50) return;
   PURIN_LIMIT = n;
   localStorage.setItem('purin_limit_custom', n);
-  // Lokalen ts vorrücken damit liveRefresh den DB-Wert nicht zurückschreibt
-  localStorage.setItem('purin_today_ts', Date.now());
+  saveToStorage();
   renderTracker();
-}
-
-async function savePurinLimitToDb() {
-  if (SUPABASE_URL.includes('PLACEHOLDER')) return;
-  const userId = FIXED_USER_ID;
-  try {
-    const ts = Date.now();
-    await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
-    localStorage.setItem('purin_today_ts', ts);
-    showToast('✓ Purin-Limit gespeichert', 1500);
-  } catch(e) {
-    // Fallback: settings-Spalte existiert noch nicht → ohne settings speichern
-    try {
-      await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems });
-      showToast('✓ Gespeichert (Limit nur lokal – SQL-Migration ausstehend)', 3000);
-    } catch(e2) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
-  }
 }
 
 // ── Init ────────────────────────────────────────────────────────
