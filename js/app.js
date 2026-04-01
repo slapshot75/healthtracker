@@ -755,7 +755,8 @@ function render() {
 // ── Tagesverbrauchsrechner ──────────────────────────────────────
 let trackerItems = [];
 let selectedFood = null;
-let PURIN_LIMIT   = parseInt(localStorage.getItem('purin_limit_custom') || '180', 10);
+let _limitSettings = JSON.parse(localStorage.getItem('purin_limit_settings') || '{"limit":180,"ts":0}');
+let PURIN_LIMIT = _limitSettings.limit;
 const KCAL_LIMIT    = 2000;
 const PROTEIN_LIMIT = 75;
 const CARBS_LIMIT   = 250;
@@ -936,7 +937,7 @@ function saveToStorage() {
   _lastSavedTs = ts;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } }));
+  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
 }
 
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
@@ -1151,7 +1152,8 @@ function setPurinLimit(val) {
   const n = parseInt(val, 10);
   if (!n || n < 50) return;
   PURIN_LIMIT = n;
-  localStorage.setItem('purin_limit_custom', n);
+  _limitSettings = { limit: n, ts: Date.now() };
+  localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings));
   saveToStorage();
   renderTracker();
 }
@@ -2091,7 +2093,7 @@ async function syncUpload() {
     // Upsert today
     if (today.length) {
       await supabaseUpsert('purin_today', {
-        user_id: userId, ts: Date.now(), items: today, settings: { purin_limit: PURIN_LIMIT },
+        user_id: userId, ts: Date.now(), items: today, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts },
       });
     }
     // Upsert custom foods (DELETE all + INSERT)
@@ -2229,11 +2231,13 @@ async function liveRefresh() {
           ? getTodayStr()
           : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
         try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
-        // Purin-Limit aus Settings laden – nur wenn DB-Eintrag neuer
-        const remoteLimit = row.settings?.purin_limit;
-        if (remoteLimit && remoteLimit !== PURIN_LIMIT) {
+        // Purin-Limit nur übernehmen wenn remote-Limit-Timestamp neuer als lokaler
+        const remoteLimit   = row.settings?.purin_limit;
+        const remoteLimitTs = row.settings?.purin_limit_ts || 0;
+        if (remoteLimit && remoteLimitTs > _limitSettings.ts) {
           PURIN_LIMIT = remoteLimit;
-          localStorage.setItem('purin_limit_custom', remoteLimit);
+          _limitSettings = { limit: remoteLimit, ts: remoteLimitTs };
+          localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings));
           const inp = document.getElementById('purin-limit-input');
           if (inp) inp.value = remoteLimit;
         }
@@ -2242,7 +2246,7 @@ async function liveRefresh() {
     } else if (todayRows !== null && trackerItems.length > 0) {
       // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
       const ts = Date.now();
-      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
+      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
       _lastSavedTs = ts;
     }
     // Purin-Historie holen
