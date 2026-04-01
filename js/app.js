@@ -932,7 +932,7 @@ const ITEMS_DATE_KEY   = 'purin_tracker_items_date'; // wann wurden items zuletz
 function saveToStorage() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems }));
+  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems, settings: { purin_limit: PURIN_LIMIT } }));
 }
 
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
@@ -1147,6 +1147,16 @@ function setPurinLimit(val) {
   PURIN_LIMIT = n;
   localStorage.setItem('purin_limit_custom', n);
   renderTracker();
+}
+
+async function savePurinLimitToDb() {
+  if (SUPABASE_URL.includes('PLACEHOLDER')) return;
+  const userId = localStorage.getItem(SYNC_USER_KEY);
+  if (!userId) return;
+  try {
+    await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
+    showToast('✓ Purin-Limit gespeichert', 1500);
+  } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
 }
 
 // ── Init ────────────────────────────────────────────────────────
@@ -2103,7 +2113,7 @@ async function syncUpload() {
     // Upsert today
     if (today.length) {
       await supabaseUpsert('purin_today', {
-        user_id: userId, ts: Date.now(), items: today,
+        user_id: userId, ts: Date.now(), items: today, settings: { purin_limit: PURIN_LIMIT },
       });
     }
     // Upsert custom foods (DELETE all + INSERT)
@@ -2234,6 +2244,15 @@ async function liveRefresh() {
       if (remote !== JSON.stringify(trackerItems)) {
         trackerItems = todayRows[0].items || [];
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+        renderTracker();
+      }
+      // Purin-Limit aus Settings laden
+      const remoteLimit = todayRows[0].settings?.purin_limit;
+      if (remoteLimit && remoteLimit !== PURIN_LIMIT) {
+        PURIN_LIMIT = remoteLimit;
+        localStorage.setItem('purin_limit_custom', remoteLimit);
+        const inp = document.getElementById('purin-limit-input');
+        if (inp) inp.value = remoteLimit;
         renderTracker();
       }
       // ITEMS_DATE_KEY setzen: heute oder veraltet — checkMidnightReset entscheidet dann ob Reset nötig

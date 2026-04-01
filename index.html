@@ -50,7 +50,7 @@
           <label style="font-size:13px;color:var(--text2);white-space:nowrap;">Purin-Limit&nbsp;(mg):
             <input type="number" id="purin-limit-input" min="50" max="2000" step="10"
               style="width:70px;margin-left:4px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;"
-              onchange="setPurinLimit(this.value)">
+              onchange="setPurinLimit(this.value)" onkeydown="if(event.key==='Enter')savePurinLimitToDb()">
           </label>
           <button class="tracker-reset" onclick="saveDay()" id="btn-save-day" style="background:var(--text);color:var(--bg);border-color:var(--text);" disabled>Tag speichern</button>
           <button class="tracker-reset" onclick="resetTracker()">Zurücksetzen</button>

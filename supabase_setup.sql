@@ -20,8 +20,11 @@ CREATE TABLE IF NOT EXISTS purin_today (
   user_id    TEXT        NOT NULL UNIQUE,
   ts         BIGINT      NOT NULL,
   items      JSONB       NOT NULL DEFAULT '[]',
+  settings   JSONB       NOT NULL DEFAULT '{}',
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Migration: settings-Spalte für bestehende Instanzen hinzufügen
+ALTER TABLE purin_today ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}';
 
 -- Tabelle: Geh-Historie
 CREATE TABLE IF NOT EXISTS walk_history (
