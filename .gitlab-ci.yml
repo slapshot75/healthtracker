@@ -1,0 +1,48 @@
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  image: alpine:latest
+
+  script:
+    # Abhängigkeiten installieren
+    - apk add --no-cache sed
+
+    # Public-Ordner mit Unterordnern anlegen
+    - mkdir -p public/css
+    - mkdir -p public/js
+
+    # CSS und JS kopieren + Supabase-Keys in app.js einsetzen
+    - cp css/styles.css public/css/styles.css
+    - sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g"         js/app.js > public/js/app.js
+    - sed -i "s|SUPABASE_KEY_PLACEHOLDER|${SUPABASE_ANON_KEY}|g" public/js/app.js
+    - cp index.html public/index.html
+
+    # Verifikation
+    - grep -q "supabase.co" public/js/app.js && echo "OK SUPABASE_URL"   || echo "FEHLT SUPABASE_URL"
+    - grep -q "eyJ"          public/js/app.js && echo "OK SUPABASE_KEY"   || echo "FEHLT SUPABASE_KEY"
+    - test -f public/css/styles.css           && echo "OK CSS"            || echo "FEHLT CSS"
+    - test -f public/js/app.js                && echo "OK JS"             || echo "FEHLT JS"
+
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+# ──────────────────────────────────────────────────────────────────
+# PROJEKTSTRUKTUR:
+#   purin-app/
+#   ├── index.html
+#   ├── css/styles.css
+#   ├── js/app.js
+#   ├── .gitlab-ci.yml
+#   └── supabase_setup.sql
+#
+# GITLAB VARIABLES (Settings → CI/CD → Variables):
+#   SUPABASE_URL      = https://xxxx.supabase.co   [Protected+Masked]
+#   SUPABASE_ANON_KEY = eyJhbGci...                [Protected+Masked]
+# ──────────────────────────────────────────────────────────────────
