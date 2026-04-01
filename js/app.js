@@ -2249,6 +2249,9 @@ async function liveRefresh() {
         ? getTodayStr()
         : new Date(todayRows[0].ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
       try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
+    } else if (todayRows !== null && trackerItems.length > 0) {
+      // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
+      await supabaseUpsert('purin_today', { user_id: userId, ts: Date.now(), items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
     }
     // Purin-Historie holen
     const purinRows = await supabaseRequest('GET', 'purin_history',
@@ -2262,6 +2265,11 @@ async function liveRefresh() {
         renderHistory();
         if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
       }
+    } else if (purinRows !== null && getHistory().length > 0) {
+      // Kein DB-Eintrag → Erstmigration: lokale Historie hochladen
+      for (const day of getHistory()) {
+        await supabaseUpsert('purin_history', { user_id: userId, ts: day.ts, date: day.date, items: day.items, totals: day.totals || calcTotals(day.items) });
+      }
     }
     // Walk-Historie holen
     const walkRows = await supabaseRequest('GET', 'walk_history',
@@ -2274,6 +2282,11 @@ async function liveRefresh() {
           walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }))));
         renderWalkHistory();
         if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+      }
+    } else if (walkRows !== null && getWalkHistory().length > 0) {
+      // Kein DB-Eintrag → Erstmigration: lokale Walk-Historie hochladen
+      for (const day of getWalkHistory()) {
+        await supabaseUpsert('walk_history', { user_id: userId, ts: day.ts, date: day.date, data: day });
       }
     }
     // Custom Foods synchronisieren
@@ -2290,7 +2303,7 @@ async function liveRefresh() {
         render();
       }
     } else if (foodRows !== null && customFoods.length > 0) {
-      // Remote leer, lokal gefüllt → lokal zu Supabase hochladen (Initialzustand)
+      // Remote leer, lokal gefüllt → Erstmigration hochladen
       for (const f of customFoods) {
         await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
       }
@@ -2307,5 +2320,5 @@ window.addEventListener('focus', liveRefresh);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') liveRefresh();
 });
-// Alle 15 Sekunden im Hintergrund aktualisieren
-setInterval(liveRefresh, 15000);
+// Alle 5 Sekunden im Hintergrund aktualisieren
+setInterval(liveRefresh, 5000);
