@@ -934,7 +934,7 @@ function saveToStorage() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
   try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
-  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems }));
+  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } }));
 }
 
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
@@ -2104,7 +2104,7 @@ async function syncUpload() {
     // Upsert today
     if (today.length) {
       await supabaseUpsert('purin_today', {
-        user_id: userId, ts: Date.now(), items: today,
+        user_id: userId, ts: Date.now(), items: today, settings: { purin_limit: PURIN_LIMIT },
       });
     }
     // Upsert custom foods (DELETE all + INSERT)
@@ -2257,7 +2257,7 @@ async function liveRefresh() {
     } else if (todayRows !== null && trackerItems.length > 0) {
       // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
       const ts = Date.now();
-      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems });
+      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: PURIN_LIMIT } });
       try { localStorage.setItem('purin_today_ts', ts); } catch(e) {}
     }
     // Purin-Historie holen
