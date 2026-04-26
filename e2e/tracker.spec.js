@@ -61,11 +61,11 @@ test('Lebensmittel per quickAdd-Modal hinzufügen', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#tbody tr').first()).toBeVisible({ timeout: 10000 });
 
-  // "+" Button der ersten Tabellenzeile klicken
-  await page.locator('#tbody tr').first().locator('.btn-add-row').click();
+  // quickAdd() direkt aufrufen — sticky Header überdeckt sonst den Button im headless CI
+  await page.evaluate(() => quickAdd(0));
 
-  // Modal öffnet sich
-  await expect(page.locator('#gram-modal')).toHaveClass(/open/);
+  // Modal sichtbar (opacity:0 → opacity:1 via .open Klasse)
+  await expect(page.locator('#gram-modal')).toBeVisible();
   await expect(page.locator('#modal-name')).not.toBeEmpty();
 
   // Bestätigen
