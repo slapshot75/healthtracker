@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dateien zusammenstellen und Keys einsetzen
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          mkdir -p public/css public/js
+
+          cp css/styles.css public/css/styles.css
+          cp index.html public/index.html
+
+          sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g" js/app.js \
+            | sed "s|SUPABASE_KEY_PLACEHOLDER|${SUPABASE_ANON_KEY}|g" \
+            > public/js/app.js
+
+          # Verifikation
+          grep -q "supabase.co" public/js/app.js && echo "OK SUPABASE_URL"  || echo "FEHLT SUPABASE_URL"
+          grep -q "eyJ"         public/js/app.js && echo "OK SUPABASE_KEY"  || echo "FEHLT SUPABASE_KEY"
+          test -f public/css/styles.css          && echo "OK CSS"           || echo "FEHLT CSS"
+          test -f public/js/app.js               && echo "OK JS"            || echo "FEHLT JS"
+
+      - name: Pages konfigurieren
+        uses: actions/configure-pages@v5
+
+      - name: Artifact hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deployen
+        id: deployment
+        uses: actions/deploy-pages@v4
