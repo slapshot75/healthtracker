@@ -68,8 +68,8 @@ test('Lebensmittel per quickAdd-Modal hinzufügen', async ({ page }) => {
   await expect(page.locator('#gram-modal')).toBeVisible();
   await expect(page.locator('#modal-name')).not.toBeEmpty();
 
-  // Bestätigen
-  await page.click('.btn-confirm');
+  // Bestätigen — spezifisch im gram-modal, nicht in anderen Modals
+  await page.click('#gram-modal .btn-confirm');
 
   // Tracker zeigt Item
   await expect(page.locator('#tracker-list')).toBeVisible();
