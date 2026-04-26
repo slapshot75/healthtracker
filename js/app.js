@@ -1980,8 +1980,8 @@ function showToast(msg, duration = 2500) {
 }
 
 // ── Supabase Sync ───────────────────────────────────────────────
-const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
-const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';
+const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER'.trim();
+const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER'.trim();
 const SYNC_USER_KEY = 'purin_sync_user_id';
 const FIXED_USER_ID = 'mario';
 
