@@ -12,12 +12,12 @@ test('Tabellensuche filtert Ergebnisse', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#tbody tr').first()).toBeVisible({ timeout: 10000 });
 
-  await page.fill('#search', 'Huhn');
+  await page.fill('#search', 'Schwein');
   const rowCount = await page.locator('#tbody tr').count();
   expect(rowCount).toBeGreaterThan(0);
 
   const firstRow = await page.locator('#tbody tr').first().textContent();
-  expect(firstRow.toLowerCase()).toContain('huhn');
+  expect(firstRow.toLowerCase()).toContain('schwein');
 });
 
 test('Tabelle nach Name sortieren', async ({ page }) => {
@@ -62,7 +62,7 @@ test('Lebensmittel per quickAdd-Modal hinzufügen', async ({ page }) => {
   await expect(page.locator('#tbody tr').first()).toBeVisible({ timeout: 10000 });
 
   // "+" Button der ersten Tabellenzeile klicken
-  await page.locator('#tbody tr').first().locator('button[onclick^="quickAdd"]').click();
+  await page.locator('#tbody tr').first().locator('.btn-add-row').click();
 
   // Modal öffnet sich
   await expect(page.locator('#gram-modal')).toHaveClass(/open/);
