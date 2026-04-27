@@ -475,6 +475,10 @@ let currentBaseData = baseData; // überschrieben durch Supabase-Cache oder -Dow
 let data = baseData.slice();
 let _editFoodIdx = null; // null = neu anlegen, number = bestehendes bearbeiten
 
+function h(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function mergeCustomFoods() {
   data = [...currentBaseData, ...customFoods.map((f, i) => ({ ...f, _custom: true, _customIdx: i }))];
 }
@@ -717,10 +721,10 @@ function render() {
       const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${d._customIdx})" title="Bearbeiten">✎</button>` : '';
       const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${d._customIdx})" title="Löschen">×</button>` : '';
       return `<tr>
-        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${d.name} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
+        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
         <td style="text-align:center;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;">${i + 1}</td>
-        <td style="font-weight:500">${d.name}</td>
-        <td><span class="cat-badge">${d.category}</span></td>
+        <td style="font-weight:500">${h(d.name)}</td>
+        <td><span class="cat-badge">${h(d.category)}</span></td>
         <td>
           <div class="purin-bar">
             <span class="num">${d.purin}</span>
@@ -838,7 +842,7 @@ function showSuggestions() {
     const level = getLevel(d.purin);
     const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
     return `<div onclick="selectFood(${data.indexOf(d)})">
-      <span class="sug-name">${d.name}</span>
+      <span class="sug-name">${h(d.name)}</span>
       <span class="sug-meta" style="color:${colors[level]}">${d.purin} mg Purin · ${d.kcal} kcal</span>
     </div>`;
   }).join("");
@@ -1062,7 +1066,7 @@ function renderHistory() {
     const col = purinColor(t.purin);
     const itemsHtml = day.items.map(it =>
       `<div class="history-day-item">
-        <span class="history-day-item-name">${it.name} (${it.grams} g)</span>
+        <span class="history-day-item-name">${h(it.name)} (${it.grams} g)</span>
         <span>${it.purin} mg</span>
       </div>`
     ).join('');
@@ -1119,7 +1123,7 @@ function renderTracker() {
     const lvl = getLevel(item.purin / (item.grams / 100));
     return `<div class="tracker-item">
       <div>
-        <div class="tracker-item-name">${item.name}</div>
+        <div class="tracker-item-name">${h(item.name)}</div>
         <div class="tracker-item-meta" style="color:${colors[lvl]}">
           ${item.purin} mg Purin &nbsp;·&nbsp; ${item.kcal} kcal &nbsp;·&nbsp; E: ${item.protein} g &nbsp;·&nbsp; KH: ${item.carbs} g &nbsp;·&nbsp; F: ${item.fat} g
         </div>
@@ -1426,7 +1430,7 @@ function renderEditItems() {
     const lvl = getLevel(item.purin / (item.grams / 100));
     return `<div class="edit-item">
       <div>
-        <div class="edit-item-name">${item.name}</div>
+        <div class="edit-item-name">${h(item.name)}</div>
         <div class="edit-item-meta" style="color:${colors[lvl]}">${item.purin} mg · ${item.kcal} kcal</div>
       </div>
       <input class="edit-item-grams" type="number" min="1" max="5000" value="${item.grams}"
@@ -1495,7 +1499,7 @@ function showEditSuggestions() {
   box.innerHTML = hits.map(d => {
     const col = colors[getLevel(d.purin)];
     return `<div onclick="selectEditFood(${data.indexOf(d)})">
-      <span>${d.name}</span>
+      <span>${h(d.name)}</span>
       <span style="font-size:11px;color:${col}">${d.purin} mg · ${d.kcal} kcal</span>
     </div>`;
   }).join('');
