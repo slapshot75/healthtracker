@@ -2092,8 +2092,8 @@ function showToast(msg, duration = 2500) {
 }
 
 // ── Supabase Sync ───────────────────────────────────────────────
-const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER'.trim();
-const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER'.trim();
+const SUPABASE_URL = (typeof LOCAL_SUPABASE_URL !== 'undefined' ? LOCAL_SUPABASE_URL : 'SUPABASE_URL_PLACEHOLDER').trim();
+const SUPABASE_KEY = (typeof LOCAL_SUPABASE_KEY !== 'undefined' ? LOCAL_SUPABASE_KEY : 'SUPABASE_KEY_PLACEHOLDER').trim();
 const SYNC_USER_KEY = 'purin_sync_user_id';
 const FIXED_USER_ID = 'mario';
 
