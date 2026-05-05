@@ -1797,13 +1797,39 @@ async function clearWalkHistory() {
 }
 
 // ── Walk-Eintrag bearbeiten ──────────────────────────────────────
-let editWalkTs = null;
+let editWalkTs    = null;
+let editWalkIsNew = false;
+
+function openNewWalkDayModal() {
+  editWalkIsNew = true;
+  editWalkTs    = null;
+  document.getElementById('ewalk-title').textContent    = 'Vergangenen Eintrag hinzufügen';
+  document.getElementById('ewalk-date').style.display   = 'none';
+  const picker = document.getElementById('ewalk-datepicker');
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  picker.value = yesterday.toISOString().slice(0, 10);
+  picker.style.display = '';
+  // Werte aus dem Hauptrechner übernehmen als Startwerte
+  document.getElementById('ew-weight').value   = document.getElementById('w-weight').value || 80;
+  document.getElementById('ew-speed').value    = document.getElementById('w-speed').value  || 5;
+  document.getElementById('ew-grade').value    = document.getElementById('w-grade').value  || 0;
+  document.getElementById('ew-duration').value = document.getElementById('w-duration').value || 60;
+  document.getElementById('ew-age').value      = document.getElementById('w-age').value    || 45;
+  const sex = document.querySelector('input[name="w-sex"]:checked')?.value || 'm';
+  document.querySelector(`input[name="ew-sex"][value="${sex}"]`).checked = true;
+  calcWalkEdit();
+  document.getElementById('edit-walk-modal').classList.add('open');
+}
 
 function openEditWalkModal(ts) {
   const day = getWalkHistory().find(d => d.ts === ts);
   if (!day) return;
-  editWalkTs = ts;
-  document.getElementById('ewalk-date').textContent = day.date;
+  editWalkIsNew = false;
+  editWalkTs    = ts;
+  document.getElementById('ewalk-title').textContent    = 'Geh-Eintrag bearbeiten';
+  document.getElementById('ewalk-date').textContent     = day.date;
+  document.getElementById('ewalk-date').style.display   = '';
+  document.getElementById('ewalk-datepicker').style.display = 'none';
   document.getElementById('ew-weight').value   = day.weight;
   document.getElementById('ew-speed').value    = day.speed;
   document.getElementById('ew-grade').value    = day.grade;
@@ -1817,7 +1843,7 @@ function openEditWalkModal(ts) {
 function closeEditWalkModal(e) {
   if (e && e.target !== document.getElementById('edit-walk-modal')) return;
   document.getElementById('edit-walk-modal').classList.remove('open');
-  editWalkTs = null;
+  editWalkTs = null; editWalkIsNew = false;
 }
 
 function calcWalkEdit() {
@@ -1855,10 +1881,37 @@ function calcWalkEdit() {
 }
 
 async function saveEditWalkDay() {
-  if (editWalkTs === null) return;
   const result  = calcWalkEdit();
   const history = getWalkHistory();
-  const idx     = history.findIndex(d => d.ts === editWalkTs);
+
+  if (editWalkIsNew) {
+    const dateVal = document.getElementById('ewalk-datepicker').value;
+    if (!dateVal) { showToast('⚠ Bitte ein Datum wählen', 3000); return; }
+    const [y, m, d] = dateVal.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
+    const ts = dateObj.getTime();
+    if (history.find(e => e.ts === ts)) {
+      showToast('⚠ Für dieses Datum existiert bereits ein Eintrag', 3000); return;
+    }
+    const dateStr = dateObj.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+    const entry = { ts, date: dateStr, ...result };
+    history.push(entry);
+    history.sort((a, b) => b.ts - a.ts);
+    if (history.length > 200) history.splice(200);
+    try {
+      localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(history));
+      renderWalkHistory();
+      renderWalkChart();
+      document.getElementById('edit-walk-modal').classList.remove('open');
+      editWalkTs = null; editWalkIsNew = false;
+      showToast('✓ Eintrag gespeichert');
+    } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+    dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts, date: dateStr, data: entry }));
+    return;
+  }
+
+  if (editWalkTs === null) return;
+  const idx = history.findIndex(d => d.ts === editWalkTs);
   if (idx === -1) return;
   const ts = editWalkTs;
   history[idx] = { ...history[idx], ...result };

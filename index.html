@@ -318,7 +318,10 @@
             <div class="history-title">Geh-Historie</div>
             <div class="history-sub">Gespeicherte Berechnungen – lokal im Browser</div>
           </div>
-          <button class="tracker-reset" onclick="clearWalkHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+          <div style="display:flex;gap:8px;">
+            <button class="tracker-reset" onclick="openNewWalkDayModal()">+ Eintrag hinzufügen</button>
+            <button class="tracker-reset" onclick="clearWalkHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+          </div>
         </div>
         <div id="walk-history-list"><div class="walk-history-empty">Noch keine gespeicherten Einträge.</div></div>
       </div>
@@ -474,8 +477,9 @@
   <div class="edit-modal" style="max-width:520px;">
     <div class="edit-modal-header">
       <div>
-        <div class="edit-modal-title">Geh-Eintrag bearbeiten</div>
+        <div class="edit-modal-title" id="ewalk-title">Geh-Eintrag bearbeiten</div>
         <div class="edit-modal-date" id="ewalk-date"></div>
+        <input type="date" id="ewalk-datepicker" style="display:none;margin-top:4px;font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-family:inherit;">
       </div>
       <button onclick="closeEditWalkModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);font-family:inherit;">×</button>
     </div>
