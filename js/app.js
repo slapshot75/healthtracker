@@ -1546,13 +1546,16 @@ function saveEditDay() {
   if (idx === -1) return;
   history[idx].items  = editDayItems;
   history[idx].totals = calcTotals(editDayItems);
+  const entry = history[idx];
+  const ts = editDayTs;
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     renderHistory();
     renderChart();
     document.getElementById('edit-modal').classList.remove('open');
     editDayTs = null; editDayItems = []; editSelFood = null;
-  } catch(e) { alert('Speichern fehlgeschlagen.'); }
+  } catch(e) { alert('Speichern fehlgeschlagen.'); return; }
+  dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts, date: entry.date, items: entry.items, totals: entry.totals }));
 }
 
 document.getElementById('edit-modal').addEventListener('click', e => {
