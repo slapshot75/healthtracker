@@ -16,7 +16,7 @@ healthtracker/
 │   └── styles.css          # Alle CSS-Regeln
 ├── js/
 │   └── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2210 Zeilen)
-├── .gitlab-ci.yml          # CI/CD Pipeline für GitLab Pages
+├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
 ├── supabase_setup.sql      # Einmalig in Supabase ausführen
 └── CLAUDE.md               # Diese Datei
 ```
@@ -25,12 +25,12 @@ healthtracker/
 
 ## Deployment
 
-- **Hosting:** GitLab Pages → `https://slapshot1701.gitlab.io/claude`
-- **Branch:** `master`
-- **Pipeline:** `.gitlab-ci.yml` injiziert Supabase-Keys via `sed` in `js/app.js`
-- **Supabase-Keys** werden NICHT im Repository gespeichert — nur als GitLab CI/CD Variables
+- **Hosting:** GitHub Pages → `https://slapshot75.github.io/healthtracker/`
+- **Branch:** `main`
+- **Pipeline:** `.github/workflows/deploy.yml` injiziert Supabase-Keys via `sed` in `js/app.js`
+- **Supabase-Keys** werden NICHT im Repository gespeichert — nur als GitHub Secrets
 
-### GitLab CI/CD Variables
+### GitHub Secrets
 | Key | Beschreibung |
 |-----|-------------|
 | `SUPABASE_URL` | `https://sqcdjemmerejltbncqrs.supabase.co` |
@@ -200,10 +200,10 @@ const FAT_LIMIT     = 65;   // g
 # 2. Committen und pushen
 git add .
 git commit -m "Feature/Fix: Beschreibung"
-git push origin master
+git push origin main
 
-# 3. Pipeline abwarten (~1 Min) → grün ✓
-# 4. App aufrufen: https://slapshot1701.gitlab.io/claude
+# 3. Pipeline abwarten (~2 Min, Tests + Deploy) → grün ✓
+# 4. App aufrufen: https://slapshot75.github.io/healthtracker/
 # 5. Ctrl+Shift+R für Hard Reload
 ```
 
@@ -212,7 +212,7 @@ git push origin master
 ## Bekannte Eigenheiten
 
 - **UNIQUE constraint** auf `ts` in `purin_history` / `walk_history` und auf `user_id` in `purin_today` → deshalb DELETE+INSERT statt UPSERT
-- **Branch heißt `master`** (nicht `main`) → in `.gitlab-ci.yml` beachten
+- **Branch heißt `main`** → in `.github/workflows/deploy.yml` definiert
 - **Platzhalter-Check** in `syncUpload/Download` nutzt `.includes('PLACEHOLDER')` statt direktem Vergleich, weil `sed` ALLE Vorkommen ersetzt
 - **ts wird normalisiert** auf `00:00:00` des Tages via `getDayTs()` → verhindert doppelte Einträge in Supabase
 - **Live-Sync** läuft passiv im Hintergrund (kein Polling-Interval) — nur bei Fokuswechsel

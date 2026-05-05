@@ -112,7 +112,10 @@
           <div class="history-title">Tageshistorie</div>
           <div class="history-sub">Gespeicherte Tage – lokal im Browser gespeichert</div>
         </div>
-        <button class="tracker-reset" onclick="clearHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+        <div style="display:flex;gap:8px;">
+          <button class="tracker-reset" onclick="openNewDayModal()">+ Tag hinzufügen</button>
+          <button class="tracker-reset" onclick="clearHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+        </div>
       </div>
       <div id="history-list"><div class="history-empty">Noch keine gespeicherten Tage.</div></div>
     </div>
@@ -436,8 +439,9 @@
   <div class="edit-modal">
     <div class="edit-modal-header">
       <div>
-        <div class="edit-modal-title">Tag bearbeiten</div>
+        <div class="edit-modal-title" id="edit-modal-title">Tag bearbeiten</div>
         <div class="edit-modal-date" id="edit-modal-date"></div>
+        <input type="date" id="edit-modal-datepicker" style="display:none;margin-top:4px;font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-family:inherit;">
       </div>
       <button onclick="closeEditModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);font-family:inherit;">×</button>
     </div>

@@ -1402,14 +1402,37 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 let editDayTs      = null;   // timestamp of day being edited
 let editDayItems   = [];     // working copy of items
 let editSelFood    = null;   // selected food for add-row
+let editDayIsNew   = false;  // true when adding a new historical day
+
+function openNewDayModal() {
+  editDayIsNew = true;
+  editDayTs    = null;
+  editDayItems = [];
+  editSelFood  = null;
+  document.getElementById('edit-modal-title').textContent = 'Vergangenen Tag hinzufügen';
+  document.getElementById('edit-modal-date').style.display = 'none';
+  const picker = document.getElementById('edit-modal-datepicker');
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  picker.value = yesterday.toISOString().slice(0, 10);
+  picker.style.display = '';
+  document.getElementById('edit-search').value = '';
+  document.getElementById('edit-grams').value  = 100;
+  document.getElementById('edit-suggestions').style.display = 'none';
+  renderEditItems();
+  document.getElementById('edit-modal').classList.add('open');
+}
 
 function openEditModal(ts) {
   const history = getHistory();
   const day = history.find(d => d.ts === ts);
   if (!day) return;
+  editDayIsNew = false;
   editDayTs    = ts;
   editDayItems = day.items.map(i => ({...i, id: i.id || (Date.now() + Math.random())}));
-  document.getElementById('edit-modal-date').textContent = day.date;
+  document.getElementById('edit-modal-title').textContent = 'Tag bearbeiten';
+  document.getElementById('edit-modal-date').textContent  = day.date;
+  document.getElementById('edit-modal-date').style.display = '';
+  document.getElementById('edit-modal-datepicker').style.display = 'none';
   document.getElementById('edit-search').value = '';
   document.getElementById('edit-grams').value  = 100;
   document.getElementById('edit-suggestions').style.display = 'none';
@@ -1421,7 +1444,7 @@ function openEditModal(ts) {
 function closeEditModal(e) {
   if (e && e.target !== document.getElementById('edit-modal')) return;
   document.getElementById('edit-modal').classList.remove('open');
-  editDayTs = null; editDayItems = []; editSelFood = null;
+  editDayTs = null; editDayItems = []; editSelFood = null; editDayIsNew = false;
 }
 
 function renderEditItems() {
@@ -1540,8 +1563,37 @@ function addToEditDay() {
 }
 
 function saveEditDay() {
-  if (editDayTs === null) return;
   const history = getHistory();
+
+  if (editDayIsNew) {
+    const dateVal = document.getElementById('edit-modal-datepicker').value;
+    if (!dateVal) { alert('Bitte ein Datum wählen.'); return; }
+    const [y, m, d] = dateVal.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
+    const ts = dateObj.getTime();
+    if (history.find(e => e.ts === ts)) {
+      alert('Für dieses Datum existiert bereits ein Eintrag.\nNutze stattdessen den Bearbeiten-Button (✎).');
+      return;
+    }
+    const dateStr = dateObj.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+    const totals  = calcTotals(editDayItems);
+    const entry   = { ts, date: dateStr, items: editDayItems, totals };
+    history.push(entry);
+    history.sort((a, b) => b.ts - a.ts);
+    if (history.length > 90) history.splice(90);
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      renderHistory();
+      renderChart();
+      document.getElementById('edit-modal').classList.remove('open');
+      editDayTs = null; editDayItems = []; editSelFood = null; editDayIsNew = false;
+      showToast('✓ Tag gespeichert');
+    } catch(e) { alert('Speichern fehlgeschlagen.'); return; }
+    dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts, date: dateStr, items: entry.items, totals }));
+    return;
+  }
+
+  if (editDayTs === null) return;
   const idx = history.findIndex(d => d.ts === editDayTs);
   if (idx === -1) return;
   history[idx].items  = editDayItems;
