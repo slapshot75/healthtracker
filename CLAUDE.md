@@ -15,7 +15,8 @@ healthtracker/
 ├── css/
 │   └── styles.css          # Alle CSS-Regeln
 ├── js/
-│   └── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2210 Zeilen)
+│   ├── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2435 Zeilen)
+│   └── local-config.js     # Nur lokal: Supabase-Keys für Live Server (.gitignore!)
 ├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
 ├── supabase_setup.sql      # Einmalig in Supabase ausführen
 └── CLAUDE.md               # Diese Datei
@@ -141,19 +142,21 @@ const FAT_LIMIT     = 65;   // g
 
 ### Historie bearbeiten (Purin)
 - `openEditModal(ts)` — Historien-Tag im Edit-Modal öffnen
+- `openNewDayModal()` — Leeres Modal für vergangenen Tag (Datum per Datepicker wählbar)
 - `closeEditModal(e)` — Modal schließen
 - `renderEditItems()` — Items im Edit-Modal rendern
 - `updateEditGrams(id, val)` — Grammzahl eines Items ändern
 - `removeEditItem(id)` — Item aus Edit-Kopie entfernen
 - `showEditSuggestions()` / `selectEditFood(idx)` — Suchfeld im Edit-Modal
 - `addToEditDay()` — Lebensmittel zum bearbeiteten Tag hinzufügen
-- `saveEditDay()` — Geänderten Tag speichern (localStorage + Supabase)
+- `saveEditDay()` — Geänderten Tag speichern (localStorage + Supabase); erstellt auch neuen Tag wenn `editDayIsNew`
 
 ### Historie bearbeiten (Walk)
 - `openEditWalkModal(ts)` — Walk-Eintrag im Edit-Modal öffnen
+- `openNewWalkDayModal()` — Leeres Modal für vergangenen Walk (Datum per Datepicker, Startwerte aus Hauptrechner)
 - `closeEditWalkModal(e)` — Modal schließen
 - `calcWalkEdit()` — Werte im Edit-Modal neu berechnen
-- `saveEditWalkDay()` — Geänderten Walk-Eintrag speichern (localStorage + Supabase)
+- `saveEditWalkDay()` — Geänderten Walk-Eintrag speichern (localStorage + Supabase); erstellt auch neuen Eintrag wenn `editWalkIsNew`
 
 ### Supabase Sync
 - `syncUpload()` — Alle lokalen Daten zu Supabase hochladen
@@ -218,6 +221,8 @@ git push origin main
 - **Live-Sync** läuft passiv im Hintergrund (kein Polling-Interval) — nur bei Fokuswechsel
 - **`data[]`** ist immer `currentBaseData + customFoods` — nie direkt schreiben, `mergeCustomFoods()` verwenden
 - **`lebensmittel`** Tabelle: `user_id='__base__'` für Basisdaten (read-only), eigene `user_id` für Custom Foods — UNIQUE auf `(user_id, name)`
+- **`js/local-config.js`** — nur für lokale Entwicklung mit Live Server; steht in `.gitignore` und wird nie committet; auf GitHub Pages werden Keys durch die Pipeline ersetzt
+- **XSS-Schutz in inline-Handlern** — alle dynamischen Werte in `onclick`/`oninput`-Attributen (item.id, day.ts, d.ts, d._customIdx) werden mit `Number()` erzwungen, damit manipulierte localStorage-Einträge keinen Code einschleusen können
 
 ---
 
