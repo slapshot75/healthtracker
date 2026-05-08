@@ -718,8 +718,8 @@ function render() {
       const level = getLevel(d.purin);
       const rec = getRec(d.purin);
       const pct = Math.min(100, Math.round((d.purin / maxPurin) * 100));
-      const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${d._customIdx})" title="Bearbeiten">✎</button>` : '';
-      const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${d._customIdx})" title="Löschen">×</button>` : '';
+      const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${Number(d._customIdx)})" title="Bearbeiten">✎</button>` : '';
+      const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${Number(d._customIdx)})" title="Löschen">×</button>` : '';
       return `<tr>
         <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
         <td style="text-align:center;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;">${i + 1}</td>
@@ -1071,7 +1071,7 @@ function renderHistory() {
       </div>`
     ).join('');
     return `<div class="history-day">
-      <div class="history-day-header" onclick="toggleDay(${day.ts})">
+      <div class="history-day-header" onclick="toggleDay(${Number(day.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
           <div class="history-day-date">${day.date}</div>
           <div class="history-day-summary">
@@ -1082,8 +1082,8 @@ function renderHistory() {
             <span class="history-day-pill">F: <strong>${t.fat} g</strong></span>
           </div>
         </div>
-        <button class="history-day-del" onclick="event.stopPropagation();openEditModal(${day.ts})" title="Tag bearbeiten" style="color:var(--text2);font-size:14px;margin-right:2px;">✎</button>
-        <button class="history-day-del" onclick="event.stopPropagation();deleteDay(${day.ts})" title="Tag löschen">×</button>
+        <button class="history-day-del" onclick="event.stopPropagation();openEditModal(${Number(day.ts)})" title="Tag bearbeiten" style="color:var(--text2);font-size:14px;margin-right:2px;">✎</button>
+        <button class="history-day-del" onclick="event.stopPropagation();deleteDay(${Number(day.ts)})" title="Tag löschen">×</button>
       </div>
       <div class="history-purin-bar" style="margin:0 14px 0;"><div class="history-purin-fill" style="width:${pct}%;background:${col}"></div></div>
       <div class="history-day-body" id="hday-${day.ts}">
@@ -1129,7 +1129,7 @@ function renderTracker() {
         </div>
       </div>
       <div class="tracker-item-g">${item.grams} g</div>
-      <button class="tracker-item-del" onclick="removeTrackerItem(${item.id})">×</button>
+      <button class="tracker-item-del" onclick="removeTrackerItem(${Number(item.id)})">×</button>
     </div>`;
   }).join("");
 
@@ -1457,8 +1457,8 @@ function renderEditItems() {
         <div class="edit-item-meta" style="color:${colors[lvl]}">${item.purin} mg · ${item.kcal} kcal</div>
       </div>
       <input class="edit-item-grams" type="number" min="1" max="5000" value="${item.grams}"
-        oninput="updateEditGrams(${item.id}, this.value)" style="height:30px;font-size:13px;text-align:center;width:72px;">
-      <button class="edit-item-del" onclick="removeEditItem(${item.id})">×</button>
+        oninput="updateEditGrams(${Number(item.id)}, this.value)" style="height:30px;font-size:13px;text-align:center;width:72px;">
+      <button class="edit-item-del" onclick="removeEditItem(${Number(item.id)})">×</button>
     </div>`;
   }).join('') || '<div style="padding:1rem;text-align:center;font-size:13px;color:var(--text3);">Keine Einträge</div>';
 
@@ -1940,7 +1940,7 @@ function renderWalkHistory() {
   }
   container.innerHTML = '<div class="walk-history-list">' + history.map(d => `
     <div class="walk-history-day">
-      <div class="walk-history-hdr" onclick="toggleWalkDay(${d.ts})">
+      <div class="walk-history-hdr" onclick="toggleWalkDay(${Number(d.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
           <div class="walk-history-date">${d.date}</div>
           <div class="walk-history-pills">
@@ -1951,10 +1951,10 @@ function renderWalkHistory() {
             <span class="walk-history-pill">${d.speed.toFixed(1)} km/h · ${d.grade.toFixed(0)} % · ${d.duration} min</span>
           </div>
         </div>
-        <button class="walk-history-edit" onclick="event.stopPropagation();openEditWalkModal(${d.ts})" title="Bearbeiten">✎</button>
-        <button class="walk-history-del" onclick="event.stopPropagation();deleteWalkDay(${d.ts})">×</button>
+        <button class="walk-history-edit" onclick="event.stopPropagation();openEditWalkModal(${Number(d.ts)})" title="Bearbeiten">✎</button>
+        <button class="walk-history-del" onclick="event.stopPropagation();deleteWalkDay(${Number(d.ts)})">×</button>
       </div>
-      <div class="walk-history-body" id="wday-${d.ts}">
+      <div class="walk-history-body" id="wday-${Number(d.ts)}">
         MET ${d.met} · Ø ${d.hr} bpm · ${d.water} ml Trinkbedarf · Gewicht ${d.weight} kg · ${d.sex === 'm' ? 'Männlich' : 'Weiblich'} · Alter ${d.age}
       </div>
     </div>`).join('') + '</div>';
