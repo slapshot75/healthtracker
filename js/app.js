@@ -751,7 +751,7 @@ function render() {
   document.getElementById("stats").innerHTML = `
     <div class="stat"><div class="stat-label">Einträge</div><div class="stat-value">${total}</div></div>
     <div class="stat"><div class="stat-label">Durchschnitt</div><div class="stat-value">${avg} mg</div></div>
-    <div class="stat"><div class="stat-label">Höchster Wert</div><div class="stat-value small">${maxRow ? maxRow.name : "–"}</div></div>
+    <div class="stat"><div class="stat-label">Höchster Wert</div><div class="stat-value small">${maxRow ? h(maxRow.name) : "–"}</div></div>
     <div class="stat"><div class="stat-label">Max. Purin</div><div class="stat-value">${maxRow ? maxRow.purin : 0} mg</div></div>
   `;
 }
