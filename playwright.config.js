@@ -8,6 +8,7 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
     headless: true,
+    slowMo: 800,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },

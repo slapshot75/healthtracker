@@ -194,6 +194,12 @@ const FAT_LIMIT     = 65;   // g
 - `switchWalkTab(name)` — Walk-Tabs (calc / history / chart)
 - `showToast(msg, duration)` — Kurze Statusmeldungen
 
+### Dark/Light Mode
+- `isDarkMode()` — true wenn Dark aktiv (prüft `data-theme`-Attribut, Fallback auf System-Präferenz)
+- `toggleTheme()` — Wechselt hell/dunkel, setzt `data-theme` auf `<html>`, speichert in `localStorage('theme')`
+- `updateThemeBtn()` — Aktualisiert Label des Toggle-Buttons (`#theme-toggle`)
+- `initTheme()` — Wird beim Laden aufgerufen; liest `localStorage('theme')` und setzt `data-theme`
+
 ---
 
 ## Typischer Update-Workflow
@@ -223,6 +229,7 @@ git push origin main
 - **`lebensmittel`** Tabelle: `user_id='__base__'` für Basisdaten (read-only), eigene `user_id` für Custom Foods — UNIQUE auf `(user_id, name)`
 - **`js/local-config.js`** — nur für lokale Entwicklung mit Live Server; steht in `.gitignore` und wird nie committet; auf GitHub Pages werden Keys durch die Pipeline ersetzt
 - **XSS-Schutz in inline-Handlern** — alle dynamischen Werte in `onclick`/`oninput`-Attributen (item.id, day.ts, d.ts, d._customIdx) werden mit `Number()` erzwungen, damit manipulierte localStorage-Einträge keinen Code einschleusen können
+- **Theme-Toggle** — `data-theme="dark|light"` auf `<html>` überschreibt `@media (prefers-color-scheme)` mit höherer CSS-Spezifität; Anti-Flash-Script im `<head>` setzt `data-theme` vor CSS-Rendering aus localStorage; Charts rufen `isDarkMode()` auf statt direkt `matchMedia`
 
 ---
 

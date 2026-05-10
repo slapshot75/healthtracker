@@ -1325,7 +1325,7 @@ function renderChart() {
     return t[metric] ?? 0;
   });
 
-  const isDark     = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark     = isDarkMode();
   const gridColor  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
   const textColor  = isDark ? '#9b9a94' : '#6b6a65';
   const bgColor    = isDark ? '#1c1c1a' : '#ffffff';
@@ -1395,7 +1395,10 @@ function renderChart() {
 }
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+  if (!document.documentElement.hasAttribute('data-theme')) {
+    updateThemeBtn();
+    if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+  }
 });
 
 // ── Edit-Historie-Modal ─────────────────────────────────────────
@@ -2036,7 +2039,7 @@ function renderWalkChart() {
   const labels = days.map(d => new Date(d.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}));
   const values = days.map(d => d[metric] ?? 0);
 
-  const isDark    = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark    = isDarkMode();
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
   const textColor = isDark ? '#9b9a94' : '#6b6a65';
   const bgColor   = isDark ? '#1c1c1a' : '#ffffff';
@@ -2080,7 +2083,9 @@ function renderWalkChart() {
 }
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+  if (!document.documentElement.hasAttribute('data-theme')) {
+    if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+  }
 });
 
 // ── Export / Import ─────────────────────────────────────────────
@@ -2423,6 +2428,43 @@ async function liveRefresh() {
   }
   finally { _liveRefreshRunning = false; }
 }
+
+// ── Dark/Light Mode Toggle ──────────────────────────────────────
+function isDarkMode() {
+  const t = document.documentElement.getAttribute('data-theme');
+  if (t === 'dark')  return true;
+  if (t === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function updateThemeBtn() {
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  if (isDarkMode()) {
+    btn.textContent = 'Hell';
+    btn.title = 'Zu hellem Design wechseln';
+  } else {
+    btn.textContent = 'Dunkel';
+    btn.title = 'Zu dunklem Design wechseln';
+  }
+}
+
+function toggleTheme() {
+  const newTheme = isDarkMode() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  updateThemeBtn();
+  if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+  if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  updateThemeBtn();
+}
+
+initTheme();
 
 // Beim Laden sofort holen
 liveRefresh();

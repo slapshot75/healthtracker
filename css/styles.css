@@ -390,3 +390,33 @@
   .tab-btn.active { color: var(--text); border-bottom-color: var(--text); background: var(--bg); }
   .tab-panel { display: none; padding: 1.5rem; }
   .tab-panel.active { display: block; }
+
+  /* ── Dark/Light Toggle ── */
+  html[data-theme="dark"] {
+    --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+    --text: #f0ede6; --text2: #9b9a94; --text3: #6b6a65;
+    --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+  }
+  html[data-theme="light"] {
+    --bg: #ffffff; --bg2: #f5f4f0; --bg3: #eceae3;
+    --text: #1a1a18; --text2: #6b6a65; --text3: #a09f99;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+  }
+  html[data-theme="dark"] .badge-low       { background: #1e3a08; color: #a3d463; }
+  html[data-theme="dark"] .badge-medium    { background: #3a1e04; color: #f5bc5c; }
+  html[data-theme="dark"] .badge-high      { background: #3a150a; color: #f0a07a; }
+  html[data-theme="dark"] .badge-very-high { background: #3a0e0e; color: #f09595; }
+  html[data-theme="light"] .badge-low       { background: #EAF3DE; color: #27500A; }
+  html[data-theme="light"] .badge-medium    { background: #FAEEDA; color: #633806; }
+  html[data-theme="light"] .badge-high      { background: #FAECE7; color: #4A1B0C; }
+  html[data-theme="light"] .badge-very-high { background: #FCEBEB; color: #501313; }
+  html[data-theme="dark"] .rec-free     { background: #1e3a08; color: #a3d463; }
+  html[data-theme="dark"] .rec-moderate { background: #042C53; color: #85B7EB; }
+  html[data-theme="dark"] .rec-limited  { background: #3a1e04; color: #f5bc5c; }
+  html[data-theme="dark"] .rec-rare     { background: #3a150a; color: #f0a07a; }
+  html[data-theme="dark"] .rec-avoid    { background: #3a0e0e; color: #f09595; }
+  html[data-theme="light"] .rec-free     { background: #EAF3DE; color: #27500A; }
+  html[data-theme="light"] .rec-moderate { background: #E6F1FB; color: #0C447C; }
+  html[data-theme="light"] .rec-limited  { background: #FAEEDA; color: #633806; }
+  html[data-theme="light"] .rec-rare     { background: #FAECE7; color: #4A1B0C; }
+  html[data-theme="light"] .rec-avoid    { background: #FCEBEB; color: #501313; }
