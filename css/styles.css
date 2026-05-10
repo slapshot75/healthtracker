@@ -222,6 +222,7 @@
   .modal-gram-row { display: flex; gap: 8px; align-items: center; margin-bottom: 1.25rem; }
   .modal-gram-row input { flex: 1; }
   .modal-gram-row span { font-size: 14px; color: var(--text2); }
+  .modal-gram-row select { height: 38px; padding: 0 6px; background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; font-family: inherit; cursor: pointer; }
   .modal-preview { background: var(--bg2); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 1.25rem; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
   .modal-preview-item { display: flex; justify-content: space-between; }
   .modal-preview-item span:first-child { color: var(--text2); }
@@ -239,7 +240,9 @@
   .tracker-sub { font-size: 13px; color: var(--text2); margin-bottom: 1.25rem; }
   .tracker-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 1.25rem; }
   .tracker-add input[type="text"] { flex: 1; min-width: 160px; }
-  .tracker-add input[type="number"] { width: 90px; flex-shrink: 0; }
+  .unit-input-wrap { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+  .unit-input-wrap input[type="number"] { width: 72px; }
+  .unit-input-wrap select { height: 38px; padding: 0 6px; background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; font-family: inherit; cursor: pointer; }
   .tracker-add button { height: 38px; padding: 0 16px; background: var(--text); color: var(--bg); border: none; border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: opacity 0.15s; font-family: inherit; }
   .tracker-add button:hover { opacity: 0.8; }
   .tracker-add .suggest-wrap { position: relative; flex: 1; min-width: 160px; }

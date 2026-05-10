@@ -777,6 +777,7 @@ function quickAdd(idx) {
   document.getElementById("modal-meta").innerHTML =
     `<span style="color:${colors[level]}">${food.purin} mg Purin</span> &nbsp;·&nbsp; ${food.kcal} kcal / 100 g`;
   document.getElementById("modal-grams").value = 100;
+  document.getElementById("modal-unit").value = 'g';
   updatePreview();
   document.getElementById("gram-modal").classList.add("open");
   setTimeout(() => document.getElementById("modal-grams").focus(), 50);
@@ -786,6 +787,7 @@ function updatePreview() {
   if (modalFoodIdx === null) return;
   const food = data[modalFoodIdx];
   const g = parseFloat(document.getElementById("modal-grams").value) || 0;
+  const unit = document.getElementById("modal-unit").value || 'g';
   const f = g / 100;
   const level = getLevel(food.purin);
   const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
@@ -796,14 +798,15 @@ function updatePreview() {
     <div class="modal-preview-item"><span>Kohlenhydrate</span><span>${(food.carbs*f).toFixed(1)} g</span></div>
     <div class="modal-preview-item"><span>Ballaststoffe</span><span>${(food.fiber*f).toFixed(1)} g</span></div>
     <div class="modal-preview-item"><span>Fett</span><span>${(food.fat*f).toFixed(1)} g</span></div>
-    <div class="modal-preview-item"><span>Menge</span><span>${g} g</span></div>
+    <div class="modal-preview-item"><span>Menge</span><span>${g} ${unit}</span></div>
   `;
 }
 
 function confirmAdd() {
   if (modalFoodIdx === null) return;
   const g = parseFloat(document.getElementById("modal-grams").value) || 100;
-  addTrackerItem(data[modalFoodIdx], g);
+  const unit = document.getElementById("modal-unit").value || 'g';
+  addTrackerItem(data[modalFoodIdx], g, unit);
   closeModal();
   document.querySelector(".tab-box").scrollIntoView({behavior:"smooth", block:"nearest"});
 }
@@ -877,24 +880,27 @@ document.addEventListener("click", e => {
 
 function addFromInput() {
   const grams = parseFloat(document.getElementById("tracker-grams").value) || 100;
+  const unit = document.getElementById("tracker-unit").value || 'g';
   if (!selectedFood) {
     const q = document.getElementById("tracker-search").value.trim().toLowerCase();
     if (!q) return;
     selectedFood = data.find(d => d.name.toLowerCase().includes(q)) || null;
     if (!selectedFood) return;
   }
-  addTrackerItem(selectedFood, grams);
+  addTrackerItem(selectedFood, grams, unit);
   document.getElementById("tracker-search").value = "";
   document.getElementById("tracker-grams").value = 100;
+  document.getElementById("tracker-unit").value = 'g';
   selectedFood = null;
 }
 
-function addTrackerItem(food, grams) {
+function addTrackerItem(food, grams, unit = 'g') {
   const f = grams / 100;
   trackerItems.push({
     id: Date.now() + Math.random(),
     name: food.name,
     grams,
+    unit,
     purin:   Math.round(food.purin   * f),
     kcal:    Math.round(food.kcal    * f),
     protein: Math.round(food.protein * f * 10) / 10,
@@ -1128,7 +1134,7 @@ function renderTracker() {
           ${item.purin} mg Purin &nbsp;·&nbsp; ${item.kcal} kcal &nbsp;·&nbsp; E: ${item.protein} g &nbsp;·&nbsp; KH: ${item.carbs} g &nbsp;·&nbsp; F: ${item.fat} g
         </div>
       </div>
-      <div class="tracker-item-g">${item.grams} g</div>
+      <div class="tracker-item-g">${item.grams} ${item.unit || 'g'}</div>
       <button class="tracker-item-del" onclick="removeTrackerItem(${Number(item.id)})">×</button>
     </div>`;
   }).join("");
