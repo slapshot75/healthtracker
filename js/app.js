@@ -722,7 +722,7 @@ function render() {
       const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${Number(d._customIdx)})" title="Löschen">×</button>` : '';
       return `<tr>
         <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
-        <td style="text-align:center;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;">${i + 1}</td>
+        <td style="text-align:center;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;">${i + 1}</td>
         <td style="font-weight:500">${h(d.name)}</td>
         <td><span class="cat-badge">${h(d.category)}</span></td>
         <td>
@@ -739,7 +739,7 @@ function render() {
         <td><span class="level-badge badge-${level}">${getLevelLabel(level)}</span></td>
         <td>
           <span class="rec-badge rec-${rec}">${getRecLabel(rec)}</span>
-          <div style="font-size:11px;color:var(--text2);margin-top:3px;">${getRecDetail(rec)}</div>
+          <div style="font-size:11px;color:var(--text);margin-top:3px;">${getRecDetail(rec)}</div>
         </td>
       </tr>`;
     }).join("");
