@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Wie ein Tageseintrag synchronisiert wird",
+    "subtitle": "Healthtracker: lokal zuerst, dann über Supabase zu den anderen Geräten",
+    "output": ".archify/dataflow-sync-20261026-193133/healthtracker-sync-erklaerung.html",
+    "quality_profile": "showcase"
+  },
+  "stages": [
+    { "label": "Eingabe" },
+    { "label": "Speichern" },
+    { "label": "Cloud" },
+    { "label": "Anderes Gerät" }
+  ],
+  "nodes": [
+    { "id": "device-a", "type": "frontend", "label": "Gerät A", "sublabel": "Lebensmittel eintragen", "stage": 0, "row": 0, "tag": "Tracker" },
+    { "id": "local", "type": "database", "label": "localStorage", "sublabel": "Tagesstand sofort", "stage": 1, "row": 0, "tag": "lokal" },
+    { "id": "rest", "type": "cloud", "label": "Supabase REST", "sublabel": "Schreiben und Lesen", "stage": 2, "row": 0, "tag": "API" },
+    { "id": "pg", "type": "database", "label": "Postgres", "sublabel": "purin_today", "stage": 2, "row": 1, "tag": "dauerhaft" },
+    { "id": "device-b", "type": "frontend", "label": "Gerät B", "sublabel": "zeigt denselben Stand", "stage": 3, "row": 0, "tag": "Live-Sync" }
+  ],
+  "flows": [
+    { "id": "save-local", "from": "device-a", "to": "local", "label": "speichert", "variant": "default" },
+    { "id": "sync-write", "from": "device-a", "to": "rest", "label": "Sync-Write", "variant": "emphasis", "classification": "DELETE + INSERT" },
+    { "id": "rest-insert", "from": "rest", "to": "pg", "label": "SQL", "variant": "default" },
+    { "id": "live-read", "from": "rest", "to": "device-b", "label": "GET bei Fokus", "variant": "dashed", "classification": "Live-Sync" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Ablauf",
+      "items": [
+        "Jeder Eintrag wird sofort lokal gespeichert und danach an Supabase geschickt",
+        "Gerät B holt den Stand, sobald das Fenster den Fokus erhält"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Konflikte",
+      "items": [
+        "Der Server überschreibt beim Download den lokalen Stand",
+        "Live-Sync übernimmt Remote-Daten nur, wenn ihr Zeitstempel neuer ist"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Lokal ohne Keys",
+      "items": [
+        "Ohne Keys bleibt der Pfad nach Supabase aus; localStorage funktioniert weiter"
+      ]
+    }
+  ]
+}

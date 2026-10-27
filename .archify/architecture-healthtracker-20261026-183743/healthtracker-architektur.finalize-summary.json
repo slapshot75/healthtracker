@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\candidate.json",
+    "sha256": "fce962ebc1e84d6652d129aa73ebd56010c5ae2eb8d572ff9a4cfe8dc86794fa",
+    "bytes": 5285
+  },
+  "artifact": {
+    "path": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\healthtracker-architektur.html",
+    "sha256": "f970c5228e709ae93b954ce565211f8d633f9c7c1b461c0f8899b149392806f5",
+    "bytes": 849092
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\healthtracker-architektur.finalize.json",
+    "summaryReceipt": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\healthtracker-architektur.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\healthtracker-architektur.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-26T18:25:14.199Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 3368,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

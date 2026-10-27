@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Healthtracker – Architektur",
+    "subtitle": "Browser-Client mit localStorage, Supabase-Sync und GitHub-Pages-Pipeline",
+    "output": ".archify/architecture-healthtracker-20261026-183743/healthtracker-architektur.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Nutzer",
+      "sublabel": "Browser",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "index",
+      "type": "frontend",
+      "label": "index.html",
+      "sublabel": "Struktur, 3 Scripte",
+      "pos": [
+        250,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "app",
+      "type": "frontend",
+      "label": "app.js",
+      "sublabel": "Vanilla JS, Datenbasis",
+      "pos": [
+        250,
+        240
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "local",
+      "type": "database",
+      "label": "localStorage",
+      "sublabel": "Tag, Historie, Foods",
+      "pos": [
+        250,
+        380
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "chart",
+      "type": "external",
+      "label": "Chart.js 4.4.1",
+      "sublabel": "cdnjs CDN",
+      "pos": [
+        500,
+        60
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "rest",
+      "type": "cloud",
+      "label": "Supabase REST",
+      "sublabel": "anon key, fetch",
+      "pos": [
+        500,
+        240
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Supabase Postgres",
+      "sublabel": "4 Tabellen",
+      "pos": [
+        730,
+        240
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "actions",
+      "type": "cloud",
+      "label": "GitHub Actions",
+      "sublabel": "Test & Deploy",
+      "pos": [
+        500,
+        420
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "secrets",
+      "type": "security",
+      "label": "GitHub Secrets",
+      "sublabel": "SUPABASE_URL / _ANON_KEY",
+      "pos": [
+        730,
+        420
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "e2e",
+      "type": "backend",
+      "label": "Playwright E2E",
+      "sublabel": "e2e/ · Chromium",
+      "pos": [
+        500,
+        540
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "pages",
+      "type": "cloud",
+      "label": "GitHub Pages",
+      "sublabel": "Statisches Hosting",
+      "pos": [
+        730,
+        540
+      ],
+      "size": [
+        150,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Browser (Client)",
+      "wraps": [
+        "index",
+        "app",
+        "local"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "open-app",
+      "from": "user",
+      "to": "index",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "load-app",
+      "from": "index",
+      "to": "app",
+      "label": "lädt"
+    },
+    {
+      "id": "app-storage",
+      "from": "app",
+      "to": "local",
+      "label": "lesen/schreiben"
+    },
+    {
+      "id": "load-chart",
+      "from": "index",
+      "to": "chart",
+      "label": "lädt",
+      "variant": "dashed"
+    },
+    {
+      "id": "app-rest",
+      "from": "app",
+      "to": "rest",
+      "label": "REST",
+      "variant": "security"
+    },
+    {
+      "id": "rest-db",
+      "from": "rest",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "keys-to-actions",
+      "from": "secrets",
+      "to": "actions",
+      "label": "Keys",
+      "variant": "security"
+    },
+    {
+      "id": "ci-tests",
+      "from": "actions",
+      "to": "e2e",
+      "label": "Test-Job",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "ci-deploy",
+      "from": "actions",
+      "to": "pages",
+      "label": "Deploy",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Client",
+      "items": [
+        "Kein Build-Schritt: index.html lädt styles.css, Chart.js (CDN) und app.js",
+        "Tagesstand und Historie liegen in localStorage"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Sync",
+      "items": [
+        "Writes: DELETE + INSERT über Supabase REST (UNIQUE auf ts bzw. user_id)",
+        "Live-Sync läuft bei window focus und visibilitychange",
+        "Geräte-ID ist fest auf 'mario' gesetzt"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Lokal ohne Keys",
+      "items": [
+        "index.html lädt js/local-config.js nicht; lokal ist Supabase deaktiviert",
+        "Die Keys werden nur im Deploy-Job per sed eingesetzt"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Quellen",
+      "items": [
+        "index.html, js/app.js, supabase_setup.sql, .github/workflows/deploy.yml, playwright.config.js",
+        "Repo ohne origin-Remote: keine gepinnte Revision, Quellen nicht gegen Commit verifiziert"
+      ]
+    }
+  ]
+}

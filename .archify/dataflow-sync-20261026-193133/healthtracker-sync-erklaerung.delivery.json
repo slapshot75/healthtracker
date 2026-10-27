@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9a8a65a6-bfcc-4754-b659-f107d4e710b6",
+  "status": "current",
+  "command": "deliver",
+  "type": "dataflow",
+  "input": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\candidate.json",
+  "output": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\healthtracker-sync-erklaerung.html",
+  "specification": {
+    "sha256": "6843b6f29e2f6c44059aff20a111cbc1ac0e6921d1d40d304ae42fa11f0aec01",
+    "bytes": 2382
+  },
+  "artifact": {
+    "sha256": "e524fae0364ad459bab21a89d93e7596fb7f01625ffb02df2e4343fa1563c04b",
+    "bytes": 831405
+  }
+}

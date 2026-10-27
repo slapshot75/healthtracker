@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\candidate.json",
+    "sha256": "6843b6f29e2f6c44059aff20a111cbc1ac0e6921d1d40d304ae42fa11f0aec01",
+    "bytes": 2382
+  },
+  "artifact": {
+    "path": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\healthtracker-sync-erklaerung.html",
+    "sha256": "e524fae0364ad459bab21a89d93e7596fb7f01625ffb02df2e4343fa1563c04b",
+    "bytes": 831405
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\healthtracker-sync-erklaerung.finalize.json",
+    "summaryReceipt": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\healthtracker-sync-erklaerung.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AI\\projects\\healthtracker\\.archify\\dataflow-sync-20261026-193133\\healthtracker-sync-erklaerung.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-26T18:25:14.199Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2872,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "id": "sync-write",
+            "from": "device-a",
+            "to": "rest",
+            "label": "Sync-Write",
+            "collectionIndex": 1,
+            "artifactIndex": 2
+          },
+          "bends": 4,
+          "stretch": 1.269,
+          "directCorridorBlockers": [
+            {
+              "id": "local",
+              "label": "localStorage",
+              "box": [
+                259,
+                128,
+                112,
+                58
+              ]
+            }
+          ]
+        }
+      ],
+      "truncated": false
+    },
+    "repair": "Advisory only: this mode places or routes these relationships itself. Report them; do not remove relationships or meaning to reduce crossings."
+  }
+}

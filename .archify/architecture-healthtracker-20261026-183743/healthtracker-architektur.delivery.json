@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "7a184d99-8b99-4074-a6e5-76f065eabd08",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\candidate.json",
+  "output": "D:\\AI\\projects\\healthtracker\\.archify\\architecture-healthtracker-20261026-183743\\healthtracker-architektur.html",
+  "specification": {
+    "sha256": "fce962ebc1e84d6652d129aa73ebd56010c5ae2eb8d572ff9a4cfe8dc86794fa",
+    "bytes": 5285
+  },
+  "artifact": {
+    "sha256": "f970c5228e709ae93b954ce565211f8d633f9c7c1b461c0f8899b149392806f5",
+    "bytes": 849092
+  }
+}
