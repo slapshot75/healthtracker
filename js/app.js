@@ -932,6 +932,8 @@ function switchTab(name) {
   });
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-btn-' + name).classList.add('active');
+  const overview = document.getElementById('food-overview');
+  if (overview) overview.style.display = name === 'history' ? 'none' : '';
   if (name === 'chart') renderChart();
 }
 
