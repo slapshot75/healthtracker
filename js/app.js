@@ -1061,7 +1061,15 @@ function purinColor(val) {
   return '#E24B4A';
 }
 
-let historyMonth = null; // 'YYYY-MM' oder 'all'; null = neuester Monat
+let historyMonth = null; // 'YYYY-MM' oder 'all'; null = neuester Monat mit Einträgen
+let historyDay = null;   // gewählter Tag (1–31) im Monat oder null
+let historyCalOpen = (() => { try { return localStorage.getItem('purin_history_cal_open') !== '0'; } catch(e) { return true; } })();
+
+function toggleHistoryCal() {
+  historyCalOpen = !historyCalOpen;
+  try { localStorage.setItem('purin_history_cal_open', historyCalOpen ? '1' : '0'); } catch(e) {}
+  renderHistory();
+}
 
 function monthKey(ts) {
   const d = new Date(Number(ts));
@@ -1075,7 +1083,41 @@ function monthLabel(key) {
 
 function selectHistoryMonth(key) {
   historyMonth = key;
+  historyDay = null;
   renderHistory();
+}
+
+function shiftHistoryMonth(delta) {
+  const [y, m] = historyMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  selectHistoryMonth(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+}
+
+function selectHistoryDay(day) {
+  historyDay = historyDay === day ? null : day;
+  renderHistory();
+}
+
+function buildHistoryCalendar(key, entryDays) {
+  const [y, m] = key.split('-').map(Number);
+  const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Montag = 0
+  const dim = new Date(y, m, 0).getDate();
+  const prevDim = new Date(y, m - 1, 0).getDate();
+  const now = new Date();
+  const todayDay = (now.getFullYear() === y && now.getMonth() === m - 1) ? now.getDate() : -1;
+  let cells = '';
+  for (let i = offset - 1; i >= 0; i--) cells += `<span class="cal-day cal-out">${prevDim - i}</span>`;
+  for (let d = 1; d <= dim; d++) {
+    const has = entryDays.has(d);
+    const cls = 'cal-day' + (has ? ' cal-has' : '') + (d === todayDay ? ' cal-today' : '') + (d === historyDay ? ' cal-sel' : '');
+    cells += has
+      ? `<button class="${cls}" onclick="selectHistoryDay(${d})">${d}</button>`
+      : `<span class="${cls}">${d}</span>`;
+  }
+  const total = offset + dim;
+  for (let i = 1; i <= (7 - total % 7) % 7; i++) cells += `<span class="cal-day cal-out">${i}</span>`;
+  const head = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<span class="cal-wd">${w}</span>`).join('');
+  return `<div class="cal-grid">${head}${cells}</div>`;
 }
 
 function renderHistory() {
@@ -1085,16 +1127,23 @@ function renderHistory() {
     container.innerHTML = '<div class="history-empty">Noch keine gespeicherten Tage.</div>';
     return;
   }
-  const counts = {};
-  allHistory.forEach(d => { const k = monthKey(d.ts); counts[k] = (counts[k] || 0) + 1; });
-  const months = Object.keys(counts).sort().reverse();
-  if (historyMonth !== 'all' && !months.includes(historyMonth)) historyMonth = months[0];
-  const history = historyMonth === 'all' ? allHistory : allHistory.filter(d => monthKey(d.ts) === historyMonth);
-  const chips = months.map(k =>
-    `<button class="month-chip${k === historyMonth ? ' active' : ''}" onclick="selectHistoryMonth('${k}')">${h(monthLabel(k))} <span class="month-chip-count">${counts[k]}</span></button>`
-  ).join('') +
-    `<button class="month-chip${historyMonth === 'all' ? ' active' : ''}" onclick="selectHistoryMonth('all')">Alle <span class="month-chip-count">${allHistory.length}</span></button>`;
-  container.innerHTML = '<div class="month-chips">' + chips + '</div><div class="history-list">' + history.map(day => {
+  const months = [...new Set(allHistory.map(d => monthKey(d.ts)))].sort().reverse();
+  if (!historyMonth) historyMonth = months[0];
+  const isAll = historyMonth === 'all';
+  let history = isAll ? allHistory : allHistory.filter(d => monthKey(d.ts) === historyMonth);
+  const entryDays = new Set(history.map(d => new Date(Number(d.ts)).getDate()));
+  if (!isAll && historyDay && !entryDays.has(historyDay)) historyDay = null;
+  if (!isAll && historyDay) history = history.filter(d => new Date(Number(d.ts)).getDate() === historyDay);
+  const nav = `<div class="cal-head">
+      <div class="cal-title"${isAll ? '' : ' onclick="toggleHistoryCal()" style="cursor:pointer" title="Kalender ein-/ausklappen"'}>${isAll ? '' : `<span class="cal-chevron">${historyCalOpen ? '▾' : '▸'}</span> `}${isAll ? 'Alle Monate' : h(monthLabel(historyMonth))}
+        <span class="month-chip-count">${history.length} ${history.length === 1 ? 'Tag' : 'Tage'}</span></div>
+      ${isAll ? '' : `<button class="month-nav-btn" onclick="shiftHistoryMonth(-1)" title="Voriger Monat">▲</button>
+      <button class="month-nav-btn" onclick="shiftHistoryMonth(1)" title="Nächster Monat">▼</button>`}
+      <button class="month-chip" onclick="selectHistoryMonth('${isAll ? months[0] : 'all'}')">${isAll ? 'Nach Monat' : 'Alle'}</button>
+    </div>`;
+  const cal = isAll || !historyCalOpen ? '' : buildHistoryCalendar(historyMonth, entryDays);
+  const emptyMsg = history.length ? '' : '<div class="history-empty">Keine Einträge in diesem Monat.</div>';
+  container.innerHTML = nav + cal + emptyMsg + '<div class="history-list">' + history.map(day => {
     const t = day.totals || calcTotals(day.items);
     const pct = Math.min(100, Math.round((t.purin / PURIN_LIMIT) * 100));
     const col = purinColor(t.purin);
