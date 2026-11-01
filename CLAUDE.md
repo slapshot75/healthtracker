@@ -217,7 +217,7 @@ const FAT_LIMIT     = 65;   // g
 # 2. Committen und pushen
 git add .
 git commit -m "Feature/Fix: Beschreibung"
-git push origin main
+git push github main   # Remote heißt hier "github", nicht "origin"
 
 # 3. Pipeline abwarten (~2 Min, Tests + Deploy) → grün ✓
 # 4. App aufrufen: https://slapshot75.github.io/healthtracker/
