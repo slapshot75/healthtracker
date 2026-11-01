@@ -140,6 +140,14 @@ const FAT_LIMIT     = 65;   // g
 - `purinColor(val)` — Farbe je nach Purin-Wert
 - `pBar(val, limit)` / `pClass(val, limit)` — Fortschrittsbalken-Hilfsfunktionen
 
+### Kalender-Vorauswahl (Purin- und Geh-Historie)
+- `HIST_CAL` — Zustand je Historie (`purin` / `walk`): gewählter Monat `month` (`'YYYY-MM'`, `'all'` oder `null` = neuester Monat), gewählter Tag `day`, `open` (Kalender aufgeklappt, in `localStorage` unter `purin_history_cal_open` / `purin_walk_history_cal_open`) und `render`
+- `buildHistoryNav(kind, allHistory)` — liefert Kopfzeile + Kalender-HTML und die nach Monat/Tag gefilterten Einträge; wird von `renderHistory()` und `renderWalkHistory()` genutzt
+- `buildHistoryCalendar(kind, key, entryDays)` — Monatsraster (Mo–So), Tage mit Einträgen sind klickbar
+- `selectHistoryMonth(kind, key)` / `shiftHistoryMonth(kind, delta)` / `selectHistoryDay(kind, day)` / `toggleHistoryCal(kind)` — Bedienung; `kind` ist immer `'purin'` oder `'walk'`
+- `monthKey(ts)` / `monthLabel(key)` — Monatsschlüssel aus `ts` (nicht aus dem Datumstext) und deutsche Anzeige
+- Die Lebensmittelübersicht (`#food-overview`) wird in `switchTab()` auf dem Tab „Historie“ ausgeblendet
+
 ### Historie bearbeiten (Purin)
 - `openEditModal(ts)` — Historien-Tag im Edit-Modal öffnen
 - `openNewDayModal()` — Leeres Modal für vergangenen Tag (Datum per Datepicker wählbar)
