@@ -1059,14 +1059,40 @@ function purinColor(val) {
   return '#E24B4A';
 }
 
+let historyMonth = null; // 'YYYY-MM' oder 'all'; null = neuester Monat
+
+function monthKey(ts) {
+  const d = new Date(Number(ts));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+}
+
+function selectHistoryMonth(key) {
+  historyMonth = key;
+  renderHistory();
+}
+
 function renderHistory() {
-  const history = getHistory();
+  const allHistory = getHistory();
   const container = document.getElementById('history-list');
-  if (!history.length) {
+  if (!allHistory.length) {
     container.innerHTML = '<div class="history-empty">Noch keine gespeicherten Tage.</div>';
     return;
   }
-  container.innerHTML = '<div class="history-list">' + history.map(day => {
+  const counts = {};
+  allHistory.forEach(d => { const k = monthKey(d.ts); counts[k] = (counts[k] || 0) + 1; });
+  const months = Object.keys(counts).sort().reverse();
+  if (historyMonth !== 'all' && !months.includes(historyMonth)) historyMonth = months[0];
+  const history = historyMonth === 'all' ? allHistory : allHistory.filter(d => monthKey(d.ts) === historyMonth);
+  const chips = months.map(k =>
+    `<button class="month-chip${k === historyMonth ? ' active' : ''}" onclick="selectHistoryMonth('${k}')">${h(monthLabel(k))} <span class="month-chip-count">${counts[k]}</span></button>`
+  ).join('') +
+    `<button class="month-chip${historyMonth === 'all' ? ' active' : ''}" onclick="selectHistoryMonth('all')">Alle <span class="month-chip-count">${allHistory.length}</span></button>`;
+  container.innerHTML = '<div class="month-chips">' + chips + '</div><div class="history-list">' + history.map(day => {
     const t = day.totals || calcTotals(day.items);
     const pct = Math.min(100, Math.round((t.purin / PURIN_LIMIT) * 100));
     const col = purinColor(t.purin);

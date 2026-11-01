@@ -280,6 +280,11 @@
   .history-sub { font-size: 13px; color: var(--text2); margin-bottom: 1.25rem; }
   .history-empty { text-align: center; padding: 1.5rem; font-size: 13px; color: var(--text3); }
   .history-list { display: flex; flex-direction: column; gap: 10px; }
+  .month-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .month-chip { font-size: 12px; padding: 5px 12px; border-radius: 999px; border: 0.5px solid var(--border2); background: var(--bg2); color: var(--text2); cursor: pointer; font-family: inherit; }
+  .month-chip:hover { background: var(--bg3); }
+  .month-chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .month-chip-count { opacity: 0.6; margin-left: 2px; }
   .history-day { background: var(--bg2); border-radius: var(--radius); border: 0.5px solid var(--border); overflow: hidden; }
   .history-day-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; gap: 12px; flex-wrap: wrap; }
   .history-day-header:hover { background: var(--bg3); }
