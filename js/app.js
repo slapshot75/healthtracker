@@ -1061,14 +1061,21 @@ function purinColor(val) {
   return '#E24B4A';
 }
 
-let historyMonth = null; // 'YYYY-MM' oder 'all'; null = neuester Monat mit Einträgen
-let historyDay = null;   // gewählter Tag (1–31) im Monat oder null
-let historyCalOpen = (() => { try { return localStorage.getItem('purin_history_cal_open') !== '0'; } catch(e) { return true; } })();
+// ── Kalender-Vorauswahl (gemeinsam für Purin- und Geh-Historie) ──
+const HIST_CAL = {
+  purin: { month: null, day: null, openKey: 'purin_history_cal_open',      render: () => renderHistory() },
+  walk:  { month: null, day: null, openKey: 'purin_walk_history_cal_open', render: () => renderWalkHistory() },
+};
+Object.values(HIST_CAL).forEach(c => {
+  c.open = true;
+  try { c.open = localStorage.getItem(c.openKey) !== '0'; } catch(e) {}
+});
 
-function toggleHistoryCal() {
-  historyCalOpen = !historyCalOpen;
-  try { localStorage.setItem('purin_history_cal_open', historyCalOpen ? '1' : '0'); } catch(e) {}
-  renderHistory();
+function toggleHistoryCal(kind) {
+  const c = HIST_CAL[kind];
+  c.open = !c.open;
+  try { localStorage.setItem(c.openKey, c.open ? '1' : '0'); } catch(e) {}
+  c.render();
 }
 
 function monthKey(ts) {
@@ -1081,24 +1088,27 @@ function monthLabel(key) {
   return new Date(y, m - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
 }
 
-function selectHistoryMonth(key) {
-  historyMonth = key;
-  historyDay = null;
-  renderHistory();
+function selectHistoryMonth(kind, key) {
+  const c = HIST_CAL[kind];
+  c.month = key;
+  c.day = null;
+  c.render();
 }
 
-function shiftHistoryMonth(delta) {
-  const [y, m] = historyMonth.split('-').map(Number);
+function shiftHistoryMonth(kind, delta) {
+  const [y, m] = HIST_CAL[kind].month.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
-  selectHistoryMonth(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+  selectHistoryMonth(kind, d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
 }
 
-function selectHistoryDay(day) {
-  historyDay = historyDay === day ? null : day;
-  renderHistory();
+function selectHistoryDay(kind, day) {
+  const c = HIST_CAL[kind];
+  c.day = c.day === day ? null : day;
+  c.render();
 }
 
-function buildHistoryCalendar(key, entryDays) {
+function buildHistoryCalendar(kind, key, entryDays) {
+  const c = HIST_CAL[kind];
   const [y, m] = key.split('-').map(Number);
   const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Montag = 0
   const dim = new Date(y, m, 0).getDate();
@@ -1109,15 +1119,38 @@ function buildHistoryCalendar(key, entryDays) {
   for (let i = offset - 1; i >= 0; i--) cells += `<span class="cal-day cal-out">${prevDim - i}</span>`;
   for (let d = 1; d <= dim; d++) {
     const has = entryDays.has(d);
-    const cls = 'cal-day' + (has ? ' cal-has' : '') + (d === todayDay ? ' cal-today' : '') + (d === historyDay ? ' cal-sel' : '');
+    const cls = 'cal-day' + (has ? ' cal-has' : '') + (d === todayDay ? ' cal-today' : '') + (d === c.day ? ' cal-sel' : '');
     cells += has
-      ? `<button class="${cls}" onclick="selectHistoryDay(${d})">${d}</button>`
+      ? `<button class="${cls}" onclick="selectHistoryDay('${kind}',${d})">${d}</button>`
       : `<span class="${cls}">${d}</span>`;
   }
   const total = offset + dim;
   for (let i = 1; i <= (7 - total % 7) % 7; i++) cells += `<span class="cal-day cal-out">${i}</span>`;
   const head = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<span class="cal-wd">${w}</span>`).join('');
   return `<div class="cal-grid">${head}${cells}</div>`;
+}
+
+// Liefert Kalender-HTML und die gefilterten Einträge; `allHistory` muss nicht leer sein.
+function buildHistoryNav(kind, allHistory) {
+  const c = HIST_CAL[kind];
+  const months = [...new Set(allHistory.map(d => monthKey(d.ts)))].sort().reverse();
+  if (!c.month) c.month = months[0];
+  const isAll = c.month === 'all';
+  const dayOf = d => new Date(Number(d.ts)).getDate();
+  let history = isAll ? allHistory : allHistory.filter(d => monthKey(d.ts) === c.month);
+  const entryDays = new Set(history.map(dayOf));
+  if (!isAll && c.day && !entryDays.has(c.day)) c.day = null;
+  if (!isAll && c.day) history = history.filter(d => dayOf(d) === c.day);
+  const html = `<div class="cal-head">
+      <div class="cal-title"${isAll ? '' : ` onclick="toggleHistoryCal('${kind}')" style="cursor:pointer" title="Kalender ein-/ausklappen"`}>${isAll ? '' : `<span class="cal-chevron">${c.open ? '▾' : '▸'}</span> `}${isAll ? 'Alle Monate' : h(monthLabel(c.month))}
+        <span class="month-chip-count">${history.length} ${history.length === 1 ? 'Tag' : 'Tage'}</span></div>
+      ${isAll ? '' : `<button class="month-nav-btn" onclick="shiftHistoryMonth('${kind}',-1)" title="Voriger Monat">▲</button>
+      <button class="month-nav-btn" onclick="shiftHistoryMonth('${kind}',1)" title="Nächster Monat">▼</button>`}
+      <button class="month-chip" onclick="selectHistoryMonth('${kind}','${isAll ? months[0] : 'all'}')">${isAll ? 'Nach Monat' : 'Alle'}</button>
+    </div>`
+    + (isAll || !c.open ? '' : buildHistoryCalendar(kind, c.month, entryDays))
+    + (history.length ? '' : '<div class="history-empty">Keine Einträge in diesem Monat.</div>');
+  return { html, history };
 }
 
 function renderHistory() {
@@ -1127,23 +1160,8 @@ function renderHistory() {
     container.innerHTML = '<div class="history-empty">Noch keine gespeicherten Tage.</div>';
     return;
   }
-  const months = [...new Set(allHistory.map(d => monthKey(d.ts)))].sort().reverse();
-  if (!historyMonth) historyMonth = months[0];
-  const isAll = historyMonth === 'all';
-  let history = isAll ? allHistory : allHistory.filter(d => monthKey(d.ts) === historyMonth);
-  const entryDays = new Set(history.map(d => new Date(Number(d.ts)).getDate()));
-  if (!isAll && historyDay && !entryDays.has(historyDay)) historyDay = null;
-  if (!isAll && historyDay) history = history.filter(d => new Date(Number(d.ts)).getDate() === historyDay);
-  const nav = `<div class="cal-head">
-      <div class="cal-title"${isAll ? '' : ' onclick="toggleHistoryCal()" style="cursor:pointer" title="Kalender ein-/ausklappen"'}>${isAll ? '' : `<span class="cal-chevron">${historyCalOpen ? '▾' : '▸'}</span> `}${isAll ? 'Alle Monate' : h(monthLabel(historyMonth))}
-        <span class="month-chip-count">${history.length} ${history.length === 1 ? 'Tag' : 'Tage'}</span></div>
-      ${isAll ? '' : `<button class="month-nav-btn" onclick="shiftHistoryMonth(-1)" title="Voriger Monat">▲</button>
-      <button class="month-nav-btn" onclick="shiftHistoryMonth(1)" title="Nächster Monat">▼</button>`}
-      <button class="month-chip" onclick="selectHistoryMonth('${isAll ? months[0] : 'all'}')">${isAll ? 'Nach Monat' : 'Alle'}</button>
-    </div>`;
-  const cal = isAll || !historyCalOpen ? '' : buildHistoryCalendar(historyMonth, entryDays);
-  const emptyMsg = history.length ? '' : '<div class="history-empty">Keine Einträge in diesem Monat.</div>';
-  container.innerHTML = nav + cal + emptyMsg + '<div class="history-list">' + history.map(day => {
+  const { html: nav, history } = buildHistoryNav('purin', allHistory);
+  container.innerHTML = nav + '<div class="history-list">' + history.map(day => {
     const t = day.totals || calcTotals(day.items);
     const pct = Math.min(100, Math.round((t.purin / PURIN_LIMIT) * 100));
     const col = purinColor(t.purin);
@@ -2018,13 +2036,14 @@ function toggleWalkDay(ts) {
 }
 
 function renderWalkHistory() {
-  const history = getWalkHistory();
+  const allHistory = getWalkHistory();
   const container = document.getElementById('walk-history-list');
-  if (!history.length) {
+  if (!allHistory.length) {
     container.innerHTML = '<div class="walk-history-empty">Noch keine gespeicherten Einträge.</div>';
     return;
   }
-  container.innerHTML = '<div class="walk-history-list">' + history.map(d => `
+  const { html: nav, history } = buildHistoryNav('walk', allHistory);
+  container.innerHTML = nav + '<div class="walk-history-list">' + history.map(d => `
     <div class="walk-history-day">
       <div class="walk-history-hdr" onclick="toggleWalkDay(${Number(d.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
