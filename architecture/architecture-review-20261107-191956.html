@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architektur-Review – healthtracker</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<style>
+  .before { background: #fef2f2; border-color: #fecaca; }
+  .after  { background: #f0fdf4; border-color: #bbf7d0; }
+  .mod-box { border: 2px solid; border-radius: .5rem; padding: .4rem .6rem; font-size: .8rem; }
+  .shallow { height: 3.2rem; }
+  .deep    { height: 9rem; }
+  .badge-strong  { background:#16a34a; color:#fff; }
+  .badge-worth   { background:#2563eb; color:#fff; }
+  .badge-spec    { background:#6b7280; color:#fff; }
+  .badge { display:inline-block; padding:.15rem .6rem; border-radius:999px; font-size:.75rem; font-weight:600; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 md:p-8">
+<div class="max-w-6xl mx-auto space-y-8">
+
+<header>
+  <h1 class="text-3xl font-bold">Architektur-Review: healthtracker</h1>
+  <p class="text-slate-600 mt-2">Ausgangspunkt: <code>js/app.js</code> (2579 Zeilen, Hotspot laut Git-Historie). Es gibt kein <code>GLOSSARY.md</code> und kein <code>docs/adr/</code>, daher gibt es keine ADR-Konflikte zu prüfen.</p>
+</header>
+
+<section class="bg-white rounded-xl border p-6">
+  <h2 class="text-xl font-semibold mb-3">Befund</h2>
+  <ul class="list-disc pl-5 space-y-1 text-sm">
+    <li><b>Supabase-Zugriff ist flach verteilt.</b> Headers, URL-Bau und Fehlerbehandlung stehen an 8+ Stellen; drei Helfer (<code>supabaseDelete</code>, <code>supabaseInsert</code>, <code>supabaseRequest</code>) überschneiden sich, und viele Aufrufe umgehen sie.</li>
+    <li><b>Platzhalter-Prüfung uneinheitlich.</b> 13 Vorkommen von <code>PLACEHOLDER</code>, mit drei verschiedenen Mustern (<code>typeof</code>, <code>.includes</code>, gar nicht).</li>
+    <li><b>Purin- und Geh-Historie sind Copy-Paste-Paare.</b> <code>saveDay</code>/<code>saveWalkDay</code>, <code>deleteDay</code>/<code>deleteWalkDay</code>, <code>clearHistory</code>/<code>clearWalkHistory</code> unterscheiden sich nur in Schlüssel, Tabelle, Kappungsgrenze (90 vs. 200) und Anzeige.</li>
+    <li><b>Reine Berechnungen sind nur über E2E testbar.</b> <code>getLevel</code>, <code>getRec</code>, <code>calcTotals</code>, <code>calcWalk</code> hängen am globalen Script mit DOM-Zugriff und sind ohne Browser nicht aufrufbar.</li>
+    <li><b>Doku-Drift.</b> <code>getSyncUserId()</code> liefert immer <code>FIXED_USER_ID</code> (Zeile 2207–2209). CLAUDE.md beschreibt dagegen ein Eingabefeld und <code>SYNC_USER_KEY</code>.</li>
+  </ul>
+</section>
+
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Kandidaten</h2>
+
+  <!-- Candidate 1 -->
+  <article class="bg-white rounded-xl border p-6 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-lg font-semibold">1. Supabase-Client als tiefes Modul</h3>
+      <span class="badge badge-strong">Strong</span>
+    </div>
+    <p class="text-sm"><b>Dateien:</b> <code>js/app.js</code> – <code>supabaseDelete</code>, <code>supabaseInsert</code>, <code>supabaseUpsert</code>, <code>supabaseRequest</code> (2218–2284); Inline-<code>fetch</code> in <code>clearHistory</code> (1016), <code>deleteDay</code> (1034), <code>deleteWalkDay</code> (1875), <code>clearWalkHistory</code> (1893).</p>
+    <p class="text-sm"><b>Problem:</b> Die Schnittstelle der Supabase-Helfer ist fast so komplex wie ihre Implementierung (flach). Header, Fehlerbehandlung und Platzhalter-Check werden nicht zentral geprüft, sondern in jedem Aufruf wiederholt. Die Löschlogik existiert in drei Varianten, und <code>deleteDay</code> ist Fire-and-forget, <code>clearHistory</code> wartet dagegen.</p>
+    <p class="text-sm"><b>Lösung:</b> Ein Modul <code>db</code> mit wenigen Operationen: <code>db.insert(table, row)</code>, <code>db.upsertKeyed(table, row, keyField)</code>, <code>db.deleteWhere(table, filters)</code>, <code>db.select(table, query)</code>. Der Platzhalter-Check und die Header stehen einmal im Modul.</p>
+    <p class="text-sm"><b>Nutzen (Locality/Leverage):</b> Ein Fehler in Auth oder Header wird an einer Stelle behoben. Der Platzhalter-Check wird konsistent. Das Modul lässt sich mit einem gefälschten <code>fetch</code> testen, ohne den Browser.</p>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="before border rounded-lg p-4">
+        <div class="text-xs font-semibold text-red-700 mb-2">VORHER – flach</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="mod-box shallow border-red-300 bg-white">clearHistory<br><span class="text-xs">fetch + headers</span></div>
+          <div class="mod-box shallow border-red-300 bg-white">deleteDay<br><span class="text-xs">fetch + headers</span></div>
+          <div class="mod-box shallow border-red-300 bg-white">deleteWalkDay<br><span class="text-xs">fetch + headers</span></div>
+          <div class="mod-box shallow border-red-300 bg-white">clearWalkHistory<br><span class="text-xs">fetch + headers</span></div>
+          <div class="mod-box shallow border-red-300 bg-white">supabaseDelete / Insert / Request<br><span class="text-xs">eigene Header</span></div>
+          <div class="mod-box shallow border-red-300 bg-white">syncUpload / Download<br><span class="text-xs">13× PLACEHOLDER-Check</span></div>
+        </div>
+      </div>
+      <div class="after border rounded-lg p-4">
+        <div class="text-xs font-semibold text-green-700 mb-2">NACHHER – tief</div>
+        <div class="grid grid-cols-1 gap-2">
+          <div class="mod-box deep border-green-400 bg-white flex flex-col justify-center text-center">
+            <div class="font-semibold">db (Supabase-Modul)</div>
+            <div class="text-xs mt-1">insert · upsertKeyed · deleteWhere · select</div>
+            <div class="text-xs">Header · Fehler · Platzhalter-Check</div>
+          </div>
+          <div class="text-xs text-center text-slate-500">Aufrufer: Historie, Sync, Live-Sync, Lebensmittel</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <pre class="mermaid text-xs">
+flowchart LR
+  A[clearHistory] --> F1[fetch DELETE]
+  B[deleteDay] --> F2[fetch DELETE]
+  C[deleteWalkDay] --> F3[fetch DELETE]
+  D[clearWalkHistory] --> F4[fetch DELETE]
+  E[supabaseUpsert] --> H1[supabaseDelete] --> F5[fetch DELETE]
+  E --> H2[supabaseInsert] --> F6[fetch POST]
+      </pre>
+    </div>
+  </article>
+
+  <!-- Candidate 2 -->
+  <article class="bg-white rounded-xl border p-6 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-lg font-semibold">2. Gemeinsamer Historien-Store (Purin + Geh)</h3>
+      <span class="badge badge-strong">Strong</span>
+    </div>
+    <p class="text-sm"><b>Dateien:</b> <code>js/app.js</code> – <code>saveDay</code> (986), <code>deleteDay</code> (1026), <code>clearHistory</code> (1007), <code>saveWalkDay</code> (1847), <code>deleteWalkDay</code> (1866), <code>clearWalkHistory</code> (1883).</p>
+    <p class="text-sm"><b>Problem:</b> Sechs Funktionen teilen dieselbe Form (Laden aus localStorage, Filtern, Speichern, Rendern, Toast, DB-Spiegel). Jede Änderung muss zweimal gemacht werden, und die Abweichungen sind zufällig (<code>date</code>-Feld nur bei Purin, Kappung 90 vs. 200, Toast-Text).</p>
+    <p class="text-sm"><b>Lösung:</b> <code>createHistory({ key, table, cap, render })</code> mit den Methoden <code>add</code>, <code>remove(ts)</code>, <code>clear()</code>. Die Kalender-Logik ist bereits über <code>kind</code> parametrisiert (<code>HIST_CAL</code>) und zeigt, dass dieses Muster hier schon funktioniert.</p>
+    <p class="text-sm"><b>Nutzen:</b> Ein Ort für Kappung, Persistenz und DB-Spiegel. Die Purin- und Geh-Historie werden konsistent behandelt.</p>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="before border rounded-lg p-4">
+        <div class="text-xs font-semibold text-red-700 mb-2">VORHER – 3 Paare, fast identisch</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="mod-box shallow border-red-300 bg-white">saveDay<br>(cap 90)</div>
+          <div class="mod-box shallow border-red-300 bg-white">saveWalkDay<br>(cap 200)</div>
+          <div class="mod-box shallow border-red-300 bg-white">deleteDay</div>
+          <div class="mod-box shallow border-red-300 bg-white">deleteWalkDay</div>
+          <div class="mod-box shallow border-red-300 bg-white">clearHistory</div>
+          <div class="mod-box shallow border-red-300 bg-white">clearWalkHistory</div>
+        </div>
+      </div>
+      <div class="after border rounded-lg p-4">
+        <div class="text-xs font-semibold text-green-700 mb-2">NACHHER – ein Modul, zwei Instanzen</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="mod-box deep border-green-400 bg-white flex flex-col justify-center text-center col-span-1">
+            <div class="font-semibold">createHistory(purin)</div>
+            <div class="text-xs">add · remove · clear</div>
+          </div>
+          <div class="mod-box deep border-green-400 bg-white flex flex-col justify-center text-center col-span-1">
+            <div class="font-semibold">createHistory(walk)</div>
+            <div class="text-xs">add · remove · clear</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- Candidate 3 -->
+  <article class="bg-white rounded-xl border p-6 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-lg font-semibold">3. Reine Berechnungen aus dem globalen Script herauslösen</h3>
+      <span class="badge badge-worth">Worth exploring</span>
+    </div>
+    <p class="text-sm"><b>Dateien:</b> <code>js/app.js</code> – <code>getLevel</code>, <code>getRec</code>, <code>calcTotals</code> (1047), <code>calcWalk</code> (1737).</p>
+    <p class="text-sm"><b>Problem:</b> Die Berechnungen sind reine Funktionen, aber sie hängen am DOM und an globalem Zustand im selben Script. Die Tests laufen nur über Playwright. Die Tests verhalten sich dadurch langsam und decken Fehler in den Formeln nur indirekt ab.</p>
+    <p class="text-sm"><b>Lösung:</b> <code>js/calc.js</code> mit reinen Funktionen (ohne DOM), vor <code>app.js</code> geladen, ohne Build-Schritt. Das passt zum Setup in CLAUDE.md (Vanilla JS, kein Build-Tool). Tests dann mit Node direkt auf <code>calc.js</code>.</p>
+    <p class="text-sm"><b>Nutzen:</b> Die Formeln (ACSM, Karvonen) lassen sich schnell prüfen. Die Schnittstelle ist klein und klar.</p>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="before border rounded-lg p-4">
+        <div class="text-xs font-semibold text-red-700 mb-2">VORHER</div>
+        <div class="mod-box shallow border-red-300 bg-white text-center">app.js: Formeln + DOM + Zustand</div>
+      </div>
+      <div class="after border rounded-lg p-4">
+        <div class="text-xs font-semibold text-green-700 mb-2">NACHHER</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="mod-box deep border-green-400 bg-white flex flex-col justify-center text-center text-xs">calc.js<br>reine Funktionen</div>
+          <div class="mod-box deep border-green-400 bg-white flex flex-col justify-center text-center text-xs">app.js<br>DOM + Zustand</div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- Candidate 4 -->
+  <article class="bg-white rounded-xl border p-6 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-lg font-semibold">4. Aufteilung in ES-Module</h3>
+      <span class="badge badge-spec">Speculative</span>
+    </div>
+    <p class="text-sm"><b>Problem:</b> 2579 Zeilen in einer Datei, mit globalem Zustand. Das ist die Hauptquelle für Kopplung.</p>
+    <p class="text-sm"><b>Lösung:</b> <code>&lt;script type="module"&gt;</code> und Dateien pro Modul (Tracker, Historie, Gehrechner, Sync, Theme). Dadurch fallen die <code>onclick</code>-Handler weg, die auf globale Funktionen angewiesen sind.</p>
+    <p class="text-sm"><b>Warum nur Speculative:</b> Die Inline-Handler in <code>index.html</code> und die Architektur in CLAUDE.md setzen auf globale Funktionen. Der Umbau wäre groß und hätte kaum Nutzen, solange die Kandidaten 1–3 nicht gemacht sind. Kandidat 1 und 2 zuerst, dann neu bewerten.</p>
+  </article>
+</section>
+
+<section class="bg-indigo-50 border border-indigo-200 rounded-xl p-6">
+  <h2 class="text-xl font-semibold mb-2">Top-Empfehlung</h2>
+  <p class="text-sm"><b>Kandidat 1 (Supabase-Modul)</b> zuerst. Er betrifft die meisten Duplikate, ist mechanisch und ohne Verhaltensänderung umsetzbar, und er beseitigt die uneinheitliche Platzhalter-Prüfung und die unterschiedliche Fehlerbehandlung. Danach Kandidat 2 auf derselben Basis, weil er <code>db</code> aufruft.</p>
+</section>
+
+</div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+</script>
+</body>
+</html>
