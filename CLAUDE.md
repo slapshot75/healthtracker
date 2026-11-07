@@ -15,7 +15,8 @@ healthtracker/
 ├── css/
 │   └── styles.css          # Alle CSS-Regeln
 ├── js/
-│   ├── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2435 Zeilen)
+│   ├── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2460 Zeilen)
+│   ├── supabase.js         # Alle Supabase-Zugriffe (SupabaseSync), lädt vor app.js
 │   └── local-config.js     # Nur lokal: Supabase-Keys für Live Server (.gitignore!)
 ├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
 ├── supabase_setup.sql      # Einmalig in Supabase ausführen
@@ -28,7 +29,7 @@ healthtracker/
 
 - **Hosting:** GitHub Pages → `https://slapshot75.github.io/healthtracker/`
 - **Branch:** `main`
-- **Pipeline:** `.github/workflows/deploy.yml` injiziert Supabase-Keys via `sed` in `js/app.js`
+- **Pipeline:** `.github/workflows/deploy.yml` injiziert Supabase-Keys via `sed` in `js/supabase.js` (`js/app.js` wird unverändert kopiert)
 - **Supabase-Keys** werden NICHT im Repository gespeichert — nur als GitHub Secrets
 
 ### GitHub Secrets
@@ -37,7 +38,7 @@ healthtracker/
 | `SUPABASE_URL` | `https://sqcdjemmerejltbncqrs.supabase.co` |
 | `SUPABASE_ANON_KEY` | anon public key (beginnt mit `eyJ...`) |
 
-### Platzhalter in js/app.js
+### Platzhalter in js/supabase.js
 ```javascript
 const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';   // wird von Pipeline ersetzt
 const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
@@ -117,14 +118,13 @@ const FAT_LIMIT     = 65;   // g
 
 ### Storage
 - `saveToStorage()` / `loadFromStorage()` — localStorage lesen/schreiben
-- `dbAutoSave(fn)` — Wrapper: führt fn aus, speichert dann lokal + Supabase-Today
+- `dbAutoSave(fn)` — Wrapper: führt den Supabase-Schreibvorgang `fn` nur aus, wenn `SupabaseSync.isConfigured()`; Fehler gehen in die Sync-Anzeige. Aufruf immer als `dbAutoSave(() => SupabaseSync.…)`
 - `STORAGE_KEY` = `'purin_tracker_today'`
 - `HISTORY_KEY` = `'purin_tracker_history'`
 - `WALK_HISTORY_KEY` = `'purin_walk_history'`
 - `CUSTOM_FOODS_KEY` = `'purin_custom_foods'`
 - `BASE_FOODS_CACHE_KEY` = `'purin_base_foods'` — Cache für Supabase-Basisdaten
 - `LAST_DATE_KEY` = `'purin_last_date'` — Datum des letzten Öffnens (Midnight-Reset)
-- `SYNC_USER_KEY` = `'purin_sync_user_id'` — Geräte-ID für Supabase-Sync
 
 ### Historie
 - `getHistory()` / `renderHistory()` — Purin-Historie
@@ -166,15 +166,29 @@ const FAT_LIMIT     = 65;   // g
 - `calcWalkEdit()` — Werte im Edit-Modal neu berechnen
 - `saveEditWalkDay()` — Geänderten Walk-Eintrag speichern (localStorage + Supabase); erstellt auch neuen Eintrag wenn `editWalkIsNew`
 
-### Supabase Sync
-- `syncUpload()` — Alle lokalen Daten zu Supabase hochladen
+### Supabase Sync (in app.js)
+- `syncUpload()` — Alle lokalen Daten zu Supabase hochladen (ersetzt Server-Stand je Tabelle)
 - `syncDownload()` — Daten von Supabase laden (Server überschreibt lokal)
-- `supabaseUpsert(table, body)` — DELETE + INSERT für zuverlässiges Update
-- `supabaseDelete(table, ts, userId)` — Einzelnen Eintrag löschen
-- `supabaseInsert(table, body)` — Neuen Eintrag einfügen
-- `supabaseRequest(method, table, body, query)` — Basis-Fetch-Funktion
-- `getSyncUserId()` — Geräte-ID aus Input lesen + in localStorage speichern
 - `setSyncStatus(state, text)` — Sync-Status-Anzeige aktualisieren
+
+## Supabase-Modul (js/supabase.js)
+
+Einziger Ort mit HTTP-Zugriffen gegen Supabase. Lädt vor `app.js`. Stellt das Objekt `SupabaseSync` bereit:
+
+- `SupabaseSync.USER_ID` — feste Benutzer-ID (`'mario'`)
+- `SupabaseSync.isConfigured()` — `false`, solange die Platzhalter nicht ersetzt sind
+- Intern: `request(method, table, {query, body, prefer})` — wirft bei Status ≥ 300 mit `"<status>: <text>"`; `replaceByTs`, `deleteByTs`, `clearTable` für Tabellen mit UNIQUE auf `ts` (DELETE + INSERT)
+- `saveDay({ts, date, items, totals})` / `deleteDay(ts)` / `clearDays()` — Purin-Historie (`purin_history`)
+- `saveWalk({ts, date, data})` / `deleteWalk(ts)` / `clearWalks()` / `pullWalks()` — Geh-Historie (`walk_history`)
+- `pushToday({ts, items, settings})` / `pullToday()` — Tagesverbrauch (`purin_today`, UNIQUE auf `user_id`)
+- `pullDays()` — Purin-Historie lesen (letzte 90 Tage, neueste zuerst)
+- `pullBaseFoods()` — Basisdaten (`lebensmittel`, `user_id='__base__'`, nur lesen)
+- `pullFoods()` — eigene Lebensmittel lesen (sortiert nach `id`)
+- `saveFood(food, oldName?)` — eigenes Lebensmittel speichern; mit `oldName` zuerst den alten Namen entfernen
+- `deleteFood(name)` — eigenes Lebensmittel löschen
+- `replaceFoods(foods)` — alle eigenen Lebensmittel ersetzen (DELETE + INSERT je Eintrag)
+
+Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob er `setSyncStatus` oder `showToast` nutzt.
 
 ### Live-Sync
 - `liveRefresh()` — Holt aktuelle Daten von Supabase ohne vollständigen Sync
@@ -230,14 +244,15 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 
 - **UNIQUE constraint** auf `ts` in `purin_history` / `walk_history` und auf `user_id` in `purin_today` → deshalb DELETE+INSERT statt UPSERT
 - **Branch heißt `main`** → in `.github/workflows/deploy.yml` definiert
-- **Platzhalter-Check** in `syncUpload/Download` nutzt `.includes('PLACEHOLDER')` statt direktem Vergleich, weil `sed` ALLE Vorkommen ersetzt
+- **Platzhalter-Check** in `SupabaseSync.isConfigured()` nutzt `.includes('PLACEHOLDER')` statt direktem Vergleich, weil `sed` ALLE Vorkommen ersetzt
 - **ts wird normalisiert** auf `00:00:00` des Tages via `getDayTs()` → verhindert doppelte Einträge in Supabase
 - **Live-Sync** läuft passiv im Hintergrund (kein Polling-Interval) — nur bei Fokuswechsel
 - **`data[]`** ist immer `currentBaseData + customFoods` — nie direkt schreiben, `mergeCustomFoods()` verwenden
 - **`lebensmittel`** Tabelle: `user_id='__base__'` für Basisdaten (read-only), eigene `user_id` für Custom Foods — UNIQUE auf `(user_id, name)`
-- **`js/local-config.js`** — nur für lokale Entwicklung mit Live Server; steht in `.gitignore` und wird nie committet; auf GitHub Pages werden Keys durch die Pipeline ersetzt
+- **`js/local-config.js`** — für lokale Entwicklung gedacht; steht in `.gitignore` und wird nie committet. **Achtung:** `index.html` bindet die Datei derzeit nicht ein, lokal ohne Pipeline ist Cloud-Sync daher aus. Auf GitHub Pages werden Keys durch die Pipeline ersetzt
 - **XSS-Schutz in inline-Handlern** — alle dynamischen Werte in `onclick`/`oninput`-Attributen (item.id, day.ts, d.ts, d._customIdx) werden mit `Number()` erzwungen, damit manipulierte localStorage-Einträge keinen Code einschleusen können
 - **Theme-Toggle** — `data-theme="dark|light"` auf `<html>` überschreibt `@media (prefers-color-scheme)` mit höherer CSS-Spezifität; Anti-Flash-Script im `<head>` setzt `data-theme` vor CSS-Rendering aus localStorage; Charts rufen `isDarkMode()` auf statt direkt `matchMedia`
+- **Abhängigkeiten** — neue Pakete oder CDN-Skripte nur nach Prüfung laut `docs/dependency-policy.md` (Standardfunktionen zuerst, feste Versionen, Entwicklungs-Tools bleiben in `devDependencies`)
 
 ---
 
@@ -254,7 +269,7 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 
 ## Geräte-Sync
 
-- Geräte-ID wird in `localStorage` unter `purin_sync_user_id` gespeichert
-- Gleiche ID auf allen Geräten → Daten werden synchronisiert
+- Die Benutzer-ID ist fest in `js/supabase.js` hinterlegt (`SupabaseSync.USER_ID = 'mario'`), es gibt kein Eingabefeld
+- Alle Geräte mit derselben Konfiguration teilen sich dieselben Daten
 - **Server überschreibt immer** die lokalen Daten beim Download
 - **Live-Sync** aktualisiert automatisch bei Fensterwechsel (kein manueller Trigger nötig)

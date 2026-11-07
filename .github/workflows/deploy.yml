@@ -67,14 +67,17 @@ jobs:
           cp css/styles.css public/css/styles.css
           cp index.html public/index.html
 
-          sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g" js/app.js \
+          # Platzhalter nur in der Supabase-Datei ersetzen, app.js unverändert kopieren
+          sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g" js/supabase.js \
             | sed "s|SUPABASE_KEY_PLACEHOLDER|${SUPABASE_ANON_KEY}|g" \
-            > public/js/app.js
+            > public/js/supabase.js
+          cp js/app.js public/js/app.js
 
           # Verifikation
-          grep -q "supabase.co" public/js/app.js && echo "OK SUPABASE_URL"  || echo "FEHLT SUPABASE_URL"
-          grep -q "eyJ"         public/js/app.js && echo "OK SUPABASE_KEY"  || echo "FEHLT SUPABASE_KEY"
+          grep -q "supabase.co" public/js/supabase.js && echo "OK SUPABASE_URL"  || echo "FEHLT SUPABASE_URL"
+          grep -q "eyJ"         public/js/supabase.js && echo "OK SUPABASE_KEY"  || echo "FEHLT SUPABASE_KEY"
           test -f public/css/styles.css          && echo "OK CSS"           || echo "FEHLT CSS"
+          test -f public/js/supabase.js          && echo "OK JS-Supabase"   || echo "FEHLT JS-Supabase"
           test -f public/js/app.js               && echo "OK JS"            || echo "FEHLT JS"
 
       - name: Pages konfigurieren

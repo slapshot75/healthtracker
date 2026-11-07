@@ -501,10 +501,9 @@ function loadCustomFoodsLocal() {
 loadCustomFoodsLocal();
 
 async function refreshBaseFoodsFromSupabase() {
-  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) return;
+  if (!SupabaseSync.isConfigured()) return;
   try {
-    const rows = await supabaseRequest('GET', 'lebensmittel',
-      null, '?user_id=eq.__base__&order=id.asc&limit=600');
+    const rows = await SupabaseSync.pullBaseFoods();
     if (rows && rows.length > 0) {
       currentBaseData = rows.map(r => ({
         name: r.name, category: r.category,
@@ -584,19 +583,13 @@ async function saveNewFood() {
   render();
   showToast(isEdit ? `✓ "${name}" aktualisiert` : `✓ "${name}" hinzugefügt`);
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      try {
-        if (isEdit && oldName) {
-          // Alten Eintrag löschen, neuen einfügen (Name könnte geändert worden sein)
-          await fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(oldName)}`, {
-            method: 'DELETE',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-          });
-        }
-        await supabaseInsert('lebensmittel', { user_id: userId, name, category, purin, protein, kcal, carbs, fiber, fat });
-      } catch(e) { console.warn('Supabase save failed:', e); }
+  if (SupabaseSync.isConfigured()) {
+    try {
+      // Bei Bearbeitung wird der alte Name entfernt (Name könnte geändert worden sein)
+      await SupabaseSync.saveFood({ name, category, purin, protein, kcal, carbs, fiber, fat }, isEdit ? oldName : null);
+    } catch(e) {
+      console.warn('Supabase save failed:', e);
+      setSyncStatus('error', 'Speicherfehler: ' + e.message);
     }
   }
 }
@@ -610,14 +603,11 @@ function deleteCustomFood(idx) {
   render();
   showToast(`✓ "${name}" gelöscht`);
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-      }).catch(e => console.warn('Supabase delete failed:', e));
-    }
+  if (SupabaseSync.isConfigured()) {
+    SupabaseSync.deleteFood(name).catch(e => {
+      console.warn('Supabase delete failed:', e);
+      setSyncStatus('error', 'Löschfehler: ' + e.message);
+    });
   }
 }
 
@@ -949,15 +939,15 @@ function saveToStorage() {
   _lastSavedTs = ts;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  dbAutoSave(userId => supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
+  dbAutoSave(() => SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
 }
 
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
+// Führt einen Supabase-Schreibvorgang aus, sofern konfiguriert. Fehler gehen in die Sync-Anzeige.
 function dbAutoSave(fn) {
   try {
-    if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL.includes('PLACEHOLDER')) return;
-    const userId = FIXED_USER_ID;
-    fn(userId).catch(e => {
+    if (!SupabaseSync.isConfigured()) return;
+    fn().catch(e => {
       console.warn('Auto-Sync:', e);
       setSyncStatus('error', 'Schreibfehler: ' + e.message);
     });
@@ -1001,7 +991,7 @@ function saveDay() {
     btn.textContent = '✓ Gespeichert';
     setTimeout(() => { btn.textContent = 'Tag speichern'; }, 1500);
   } catch(e) { alert('Speichern fehlgeschlagen – localStorage möglicherweise voll.'); }
-  dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts: getDayTs(), date: today, items: [...trackerItems], totals: tot }));
+  dbAutoSave(() => SupabaseSync.saveDay({ ts: getDayTs(), date: today, items: [...trackerItems], totals: tot }));
 }
 
 async function clearHistory() {
@@ -1009,17 +999,11 @@ async function clearHistory() {
   try { localStorage.removeItem(HISTORY_KEY); } catch(e) {}
   renderHistory();
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}`, {
-          method: 'DELETE',
-          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-        });
-        showToast('✓ Purin-Historie lokal + in DB gelöscht');
-      } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
-    }
+  if (SupabaseSync.isConfigured()) {
+    try {
+      await SupabaseSync.clearDays();
+      showToast('✓ Purin-Historie lokal + in DB gelöscht');
+    } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
   }
 }
 
@@ -1028,14 +1012,11 @@ async function deleteDay(ts) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
   renderHistory();
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      fetch(`${SUPABASE_URL}/rest/v1/purin_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
-        method: 'DELETE',
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-      }).catch(e => console.warn('DB-Löschen fehlgeschlagen:', e));
-    }
+  if (SupabaseSync.isConfigured()) {
+    SupabaseSync.deleteDay(ts).catch(e => {
+      console.warn('DB-Löschen fehlgeschlagen:', e);
+      setSyncStatus('error', 'Löschfehler: ' + e.message);
+    });
   }
 }
 
@@ -1307,7 +1288,7 @@ function checkMidnightReset() {
       history.unshift({ ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot });
       if (history.length > 90) history.splice(90);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
-      dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot }));
+      dbAutoSave(() => SupabaseSync.saveDay({ ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot }));
     }
 
     trackerItems = [];
@@ -1693,7 +1674,7 @@ function saveEditDay() {
       editDayTs = null; editDayItems = []; editSelFood = null; editDayIsNew = false;
       showToast('✓ Tag gespeichert');
     } catch(e) { alert('Speichern fehlgeschlagen.'); return; }
-    dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts, date: dateStr, items: entry.items, totals }));
+    dbAutoSave(() => SupabaseSync.saveDay({ ts, date: dateStr, items: entry.items, totals }));
     return;
   }
 
@@ -1711,7 +1692,7 @@ function saveEditDay() {
     document.getElementById('edit-modal').classList.remove('open');
     editDayTs = null; editDayItems = []; editSelFood = null;
   } catch(e) { alert('Speichern fehlgeschlagen.'); return; }
-  dbAutoSave(userId => supabaseUpsert('purin_history', { user_id: userId, ts, date: entry.date, items: entry.items, totals: entry.totals }));
+  dbAutoSave(() => SupabaseSync.saveDay({ ts, date: entry.date, items: entry.items, totals: entry.totals }));
 }
 
 document.getElementById('edit-modal').addEventListener('click', e => {
@@ -1860,7 +1841,7 @@ function saveWalkDay() {
     btn.textContent = '✓ Gespeichert';
     setTimeout(() => btn.textContent = orig, 1500);
   } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); }
-  dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts: entry.ts, date: entry.date, data: entry }));
+  dbAutoSave(() => SupabaseSync.saveWalk({ ts: entry.ts, date: entry.date, data: entry }));
 }
 
 async function deleteWalkDay(ts) {
@@ -1869,14 +1850,11 @@ async function deleteWalkDay(ts) {
   renderWalkHistory();
   renderWalkChart();
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}&ts=eq.${ts}`, {
-        method: 'DELETE',
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-      }).catch(e => console.warn('DB-Löschen fehlgeschlagen:', e));
-    }
+  if (SupabaseSync.isConfigured()) {
+    SupabaseSync.deleteWalk(ts).catch(e => {
+      console.warn('DB-Löschen fehlgeschlagen:', e);
+      setSyncStatus('error', 'Löschfehler: ' + e.message);
+    });
   }
 }
 
@@ -1886,17 +1864,11 @@ async function clearWalkHistory() {
   renderWalkHistory();
   renderWalkChart();
 
-  if (!SUPABASE_URL.includes('PLACEHOLDER')) {
-    const userId = FIXED_USER_ID;
-    if (userId) {
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/walk_history?user_id=eq.${encodeURIComponent(userId)}`, {
-          method: 'DELETE',
-          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-        });
-        showToast('✓ Geh-Historie lokal + in DB gelöscht');
-      } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
-    }
+  if (SupabaseSync.isConfigured()) {
+    try {
+      await SupabaseSync.clearWalks();
+      showToast('✓ Geh-Historie lokal + in DB gelöscht');
+    } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
   }
 }
 
@@ -2010,7 +1982,7 @@ async function saveEditWalkDay() {
       editWalkTs = null; editWalkIsNew = false;
       showToast('✓ Eintrag gespeichert');
     } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
-    dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts, date: dateStr, data: entry }));
+    dbAutoSave(() => SupabaseSync.saveWalk({ ts, date: dateStr, data: entry }));
     return;
   }
 
@@ -2028,7 +2000,7 @@ async function saveEditWalkDay() {
     editWalkTs = null;
     showToast('✓ Eintrag gespeichert');
   } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
-  dbAutoSave(userId => supabaseUpsert('walk_history', { user_id: userId, ts, date: entry.date, data: entry }));
+  dbAutoSave(() => SupabaseSync.saveWalk({ ts, date: entry.date, data: entry }));
 }
 
 function toggleWalkDay(ts) {
@@ -2199,14 +2171,7 @@ function showToast(msg, duration = 2500) {
 }
 
 // ── Supabase Sync ───────────────────────────────────────────────
-const SUPABASE_URL = (typeof LOCAL_SUPABASE_URL !== 'undefined' ? LOCAL_SUPABASE_URL : 'SUPABASE_URL_PLACEHOLDER').trim();
-const SUPABASE_KEY = (typeof LOCAL_SUPABASE_KEY !== 'undefined' ? LOCAL_SUPABASE_KEY : 'SUPABASE_KEY_PLACEHOLDER').trim();
-const SYNC_USER_KEY = 'purin_sync_user_id';
-const FIXED_USER_ID = 'mario';
-
-function getSyncUserId() {
-  return FIXED_USER_ID;
-}
+// HTTP-Zugriff liegt in js/supabase.js (SupabaseSync).
 
 function setSyncStatus(state, text) {
   const dot   = document.getElementById('sync-dot');
@@ -2215,78 +2180,12 @@ function setSyncStatus(state, text) {
   label.textContent = text;
 }
 
-async function supabaseDelete(table, ts, userId) {
-  await fetch(`${SUPABASE_URL}/rest/v1/${table}?ts=eq.${ts}&user_id=eq.${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Prefer': 'return=minimal',
-    },
-  });
-}
-
-async function supabaseInsert(table, body) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      'apikey':        SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type':  'application/json',
-      'Prefer':        'return=minimal',
-    },
-    body: JSON.stringify(body),
-  });
-  if (res.status === 201 || res.status === 204) return null;
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`${res.status}: ${err}`);
-  }
-  return null;
-}
-
-async function supabaseUpsert(table, body) {
-  // purin_today hat unique auf user_id, alle anderen auf ts
-  if (table === 'purin_today') {
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${encodeURIComponent(body.user_id)}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Prefer': 'return=minimal',
-      },
-    });
-  } else {
-    await supabaseDelete(table, body.ts, body.user_id);
-  }
-  await supabaseInsert(table, body);
-}
-
-async function supabaseRequest(method, table, body, query = '') {
-  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      'apikey':        SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Content-Type':  'application/json',
-      'Prefer':        'return=minimal',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 204 || res.status === 201) return null;
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
+// Alle HTTP-Zugriffe laufen über SupabaseSync (js/supabase.js).
 
 async function syncUpload() {
-  const userId = getSyncUserId();
+  const userId = SupabaseSync.USER_ID;
   if (!userId) return;
-  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) {
+  if (!SupabaseSync.isConfigured()) {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
@@ -2298,31 +2197,25 @@ async function syncUpload() {
 
     // Upsert into purin_history
     for (const day of history) {
-      await supabaseUpsert('purin_history', {
-        user_id: userId, ts: day.ts, date: day.date,
+      await SupabaseSync.saveDay({
+        ts: day.ts, date: day.date,
         items: day.items, totals: day.totals || calcTotals(day.items),
       });
     }
     // Upsert into walk_history
     for (const day of walkHistory) {
-      await supabaseUpsert('walk_history', {
-        user_id: userId, ts: day.ts, date: day.date, data: day,
+      await SupabaseSync.saveWalk({
+        ts: day.ts, date: day.date, data: day,
       });
     }
     // Upsert today
     if (today.length) {
-      await supabaseUpsert('purin_today', {
-        user_id: userId, ts: Date.now(), items: today, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts },
+      await SupabaseSync.pushToday({
+        ts: Date.now(), items: today, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts },
       });
     }
-    // Upsert custom foods (DELETE all + INSERT)
-    await fetch(`${SUPABASE_URL}/rest/v1/lebensmittel?user_id=eq.${encodeURIComponent(userId)}`, {
-      method: 'DELETE',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-    });
-    for (const f of customFoods) {
-      await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
-    }
+    // Eigene Lebensmittel ersetzen (DELETE all + INSERT)
+    await SupabaseSync.replaceFoods(customFoods);
 
     setSyncStatus('ok', `Hochgeladen ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`);
     showToast(`✓ ${history.length} Tage + ${walkHistory.length} Geh-Einträge + ${customFoods.length} Lebensmittel hochgeladen`);
@@ -2334,29 +2227,25 @@ async function syncUpload() {
 }
 
 async function syncDownload() {
-  const userId = getSyncUserId();
+  const userId = SupabaseSync.USER_ID;
   if (!userId) return;
-  if (!SUPABASE_URL || SUPABASE_URL.includes('PLACEHOLDER')) {
+  if (!SupabaseSync.isConfigured()) {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
   setSyncStatus('busy', 'Wird geladen…');
   try {
     // Fetch purin history
-    const purinRows = await supabaseRequest('GET', 'purin_history',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
+    const purinRows = await SupabaseSync.pullDays();
 
     // Fetch walk history
-    const walkRows = await supabaseRequest('GET', 'walk_history',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=200`);
+    const walkRows = await SupabaseSync.pullWalks();
 
     // Fetch today
-    const todayRows = await supabaseRequest('GET', 'purin_today',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=1`);
+    const todayRows = await SupabaseSync.pullToday();
 
     // Fetch custom foods
-    const foodRows = await supabaseRequest('GET', 'lebensmittel',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc`);
+    const foodRows = await SupabaseSync.pullFoods();
 
     // Merge purin history — server wins (neueste Version aus Supabase überschreibt lokal)
     const existingPurin = getHistory();
@@ -2429,14 +2318,13 @@ refreshBaseFoodsFromSupabase();
 let _liveRefreshRunning = false;
 async function liveRefresh() {
   if (_liveRefreshRunning) return;
-  if (SUPABASE_URL.includes('PLACEHOLDER')) return;
-  const userId = FIXED_USER_ID;
+  if (!SupabaseSync.isConfigured()) return;
+  const userId = SupabaseSync.USER_ID;
   if (!userId) return;
   _liveRefreshRunning = true;
   try {
     // Heutigen Tagesverbrauch holen
-    const todayRows = await supabaseRequest('GET', 'purin_today',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+    const todayRows = await SupabaseSync.pullToday();
     if (todayRows?.length) {
       const row = todayRows[0];
       // Nur übernehmen wenn DB-Timestamp neuer als letzter eigener Write dieses Tabs
@@ -2465,12 +2353,11 @@ async function liveRefresh() {
     } else if (todayRows !== null && trackerItems.length > 0) {
       // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
       const ts = Date.now();
-      await supabaseUpsert('purin_today', { user_id: userId, ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
+      await SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
       _lastSavedTs = ts;
     }
     // Purin-Historie holen
-    const purinRows = await supabaseRequest('GET', 'purin_history',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=90`);
+    const purinRows = await SupabaseSync.pullDays();
     if (purinRows?.length) {
       const remoteTs = JSON.stringify(purinRows.map(r => r.ts));
       const localTs  = JSON.stringify(getHistory().map(d => d.ts));
@@ -2483,12 +2370,11 @@ async function liveRefresh() {
     } else if (purinRows !== null && getHistory().length > 0) {
       // Kein DB-Eintrag → Erstmigration: lokale Historie hochladen
       for (const day of getHistory()) {
-        await supabaseUpsert('purin_history', { user_id: userId, ts: day.ts, date: day.date, items: day.items, totals: day.totals || calcTotals(day.items) });
+        await SupabaseSync.saveDay({ ts: day.ts, date: day.date, items: day.items, totals: day.totals || calcTotals(day.items) });
       }
     }
     // Walk-Historie holen
-    const walkRows = await supabaseRequest('GET', 'walk_history',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=ts.desc&limit=200`);
+    const walkRows = await SupabaseSync.pullWalks();
     if (walkRows?.length) {
       const remoteTs = JSON.stringify(walkRows.map(r => r.ts));
       const localTs  = JSON.stringify(getWalkHistory().map(d => d.ts));
@@ -2501,12 +2387,11 @@ async function liveRefresh() {
     } else if (walkRows !== null && getWalkHistory().length > 0) {
       // Kein DB-Eintrag → Erstmigration: lokale Walk-Historie hochladen
       for (const day of getWalkHistory()) {
-        await supabaseUpsert('walk_history', { user_id: userId, ts: day.ts, date: day.date, data: day });
+        await SupabaseSync.saveWalk({ ts: day.ts, date: day.date, data: day });
       }
     }
     // Custom Foods synchronisieren
-    const foodRows = await supabaseRequest('GET', 'lebensmittel',
-      null, `?user_id=eq.${encodeURIComponent(userId)}&order=id.asc`);
+    const foodRows = await SupabaseSync.pullFoods();
     if (foodRows?.length) {
       // Remote hat Daten → lokal übernehmen wenn unterschiedlich
       const remoteNames = JSON.stringify(foodRows.map(r => r.name).sort());
@@ -2520,7 +2405,7 @@ async function liveRefresh() {
     } else if (foodRows !== null && customFoods.length > 0) {
       // Remote leer, lokal gefüllt → Erstmigration hochladen
       for (const f of customFoods) {
-        await supabaseInsert('lebensmittel', { user_id: userId, name: f.name, category: f.category, purin: f.purin, protein: f.protein, kcal: f.kcal, carbs: f.carbs, fiber: f.fiber, fat: f.fat });
+        await SupabaseSync.saveFood(f);
       }
     }
     setSyncStatus('ok', `Sync ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`);
