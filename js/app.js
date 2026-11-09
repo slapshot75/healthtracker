@@ -501,7 +501,7 @@ function loadCustomFoodsLocal() {
 loadCustomFoodsLocal();
 
 async function refreshBaseFoodsFromSupabase() {
-  if (!SupabaseSync.isConfigured()) return;
+  if (!syncReady()) return;
   try {
     const rows = await SupabaseSync.pullBaseFoods();
     if (rows && rows.length > 0) {
@@ -583,7 +583,7 @@ async function saveNewFood() {
   render();
   showToast(isEdit ? `✓ "${name}" aktualisiert` : `✓ "${name}" hinzugefügt`);
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     try {
       // Bei Bearbeitung wird der alte Name entfernt (Name könnte geändert worden sein)
       await SupabaseSync.saveFood({ name, category, purin, protein, kcal, carbs, fiber, fat }, isEdit ? oldName : null);
@@ -603,7 +603,7 @@ function deleteCustomFood(idx) {
   render();
   showToast(`✓ "${name}" gelöscht`);
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     SupabaseSync.deleteFood(name).catch(e => {
       console.warn('Supabase delete failed:', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
@@ -942,11 +942,16 @@ function saveToStorage() {
   dbAutoSave(() => SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
 }
 
+// Supabase nur nutzbar, wenn konfiguriert UND angemeldet
+function syncReady() {
+  return SupabaseSync.isConfigured() && SupabaseSync.isLoggedIn();
+}
+
 // Sofort in DB speichern (fire-and-forget) – kein Upload/Download nötig
 // Führt einen Supabase-Schreibvorgang aus, sofern konfiguriert. Fehler gehen in die Sync-Anzeige.
 function dbAutoSave(fn) {
   try {
-    if (!SupabaseSync.isConfigured()) return;
+    if (!syncReady()) return;
     fn().catch(e => {
       console.warn('Auto-Sync:', e);
       setSyncStatus('error', 'Schreibfehler: ' + e.message);
@@ -999,7 +1004,7 @@ async function clearHistory() {
   try { localStorage.removeItem(HISTORY_KEY); } catch(e) {}
   renderHistory();
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     try {
       await SupabaseSync.clearDays();
       showToast('✓ Purin-Historie lokal + in DB gelöscht');
@@ -1012,7 +1017,7 @@ async function deleteDay(ts) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
   renderHistory();
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     SupabaseSync.deleteDay(ts).catch(e => {
       console.warn('DB-Löschen fehlgeschlagen:', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
@@ -1851,7 +1856,7 @@ async function deleteWalkDay(ts) {
   renderWalkHistory();
   renderWalkChart();
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     SupabaseSync.deleteWalk(ts).catch(e => {
       console.warn('DB-Löschen fehlgeschlagen:', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
@@ -1865,7 +1870,7 @@ async function clearWalkHistory() {
   renderWalkHistory();
   renderWalkChart();
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     try {
       await SupabaseSync.clearWalks();
       showToast('✓ Geh-Historie lokal + in DB gelöscht');
@@ -2182,6 +2187,66 @@ function setSyncStatus(state, text) {
   label.textContent = text;
 }
 
+// ── Anmeldung (Passwort, Supabase Auth) ──────────────────────────
+function showLogin() {
+  const ov = document.getElementById('login-overlay');
+  if (!ov) return;
+  const emailEl = document.getElementById('login-email');
+  emailEl.value = SupabaseSync.lastEmail();
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').textContent = '';
+  ov.classList.add('open');
+  setTimeout(() => {
+    document.getElementById(emailEl.value ? 'login-password' : 'login-email').focus();
+  }, 50);
+}
+
+function hideLogin() {
+  const ov = document.getElementById('login-overlay');
+  if (ov) ov.classList.remove('open');
+}
+
+async function submitLogin(e) {
+  e.preventDefault();
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('login-submit');
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Anmelden…';
+  try {
+    await SupabaseSync.signIn(email, password);
+    document.getElementById('login-password').value = '';
+    hideLogin();
+    await onLoggedIn();
+  } catch (ex) {
+    errEl.textContent = ex.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Anmelden';
+  }
+}
+
+// Nach erfolgreicher Anmeldung: Basisdaten holen und Serverstand laden
+async function onLoggedIn() {
+  refreshBaseFoodsFromSupabase();
+  await syncDownload();
+}
+
+function logoutSupabase() {
+  if (!confirm('Abmelden? Lokale Daten bleiben auf diesem Gerät, der Sync ruht bis zur nächsten Anmeldung.')) return;
+  SupabaseSync.signOut();
+  setSyncStatus('', 'Abgemeldet');
+  showLogin();
+}
+
+// Abgelaufene oder widerrufene Sitzung (vom Supabase-Modul gemeldet)
+window.addEventListener('sb-auth-required', () => {
+  setSyncStatus('error', 'Anmeldung nötig');
+  showLogin();
+});
+
 // Alle HTTP-Zugriffe laufen über SupabaseSync (js/supabase.js).
 
 async function syncUpload() {
@@ -2191,6 +2256,7 @@ async function syncUpload() {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
+  if (!SupabaseSync.isLoggedIn()) { showLogin(); return; }
   setSyncStatus('busy', 'Wird hochgeladen…');
   try {
     const history     = getHistory();
@@ -2240,6 +2306,7 @@ async function syncDownload() {
     showToast('⚠ Supabase nicht konfiguriert – Keys fehlen', 3000);
     return;
   }
+  if (!SupabaseSync.isLoggedIn()) { showLogin(); return; }
   setSyncStatus('busy', 'Wird geladen…');
   try {
     // Fetch purin history
@@ -2338,7 +2405,7 @@ refreshBaseFoodsFromSupabase();
 let _liveRefreshRunning = false;
 async function liveRefresh() {
   if (_liveRefreshRunning) return;
-  if (!SupabaseSync.isConfigured()) return;
+  if (!syncReady()) return;
   const userId = SupabaseSync.USER_ID;
   if (!userId) return;
   _liveRefreshRunning = true;
@@ -2490,6 +2557,8 @@ function initTheme() {
 
 initTheme();
 
+// Ohne Sitzung zuerst die Anmeldung zeigen (liveRefresh prüft die Sitzung selbst)
+if (SupabaseSync.isConfigured() && !SupabaseSync.isLoggedIn()) showLogin();
 // Beim Laden sofort holen
 liveRefresh();
 // Bei Fensterfokus (separate Browser-Fenster) sofort aktualisieren
@@ -2666,7 +2735,7 @@ async function clearIndoorHistory() {
   renderIndoorHistory();
   renderIndoorChart();
 
-  if (SupabaseSync.isConfigured()) {
+  if (syncReady()) {
     try {
       await SupabaseSync.clearIndoor();
       showToast('✓ Indoor-Historie lokal + in DB gelöscht');

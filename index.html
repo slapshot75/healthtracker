@@ -31,6 +31,7 @@
     <div class="data-btns" style="padding-bottom:4px;">
       <button id="theme-toggle" class="data-btn" onclick="toggleTheme()" style="padding:0 10px;" title="Design wechseln">Dunkel</button>
       <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Nicht verbunden</span></div>
+      <button class="data-btn" onclick="logoutSupabase()" style="padding:0 10px;" title="Vom Cloud-Sync abmelden">Abmelden</button>
     </div>
   </nav>
 
@@ -726,6 +727,20 @@
       <button class="btn-confirm" onclick="saveEditIndoorRide()">Speichern</button>
     </div>
   </div>
+</div>
+
+<!-- Anmeldung: blockiert die App, solange keine Supabase-Sitzung besteht -->
+<div class="login-overlay" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <form class="login-box" onsubmit="submitLogin(event)">
+    <div class="login-title" id="login-title">Anmelden</div>
+    <div class="login-sub">Gesundheitsdaten werden nur nach Anmeldung geladen und gespeichert.</div>
+    <label class="login-label" for="login-email">E-Mail</label>
+    <input class="login-input" type="email" id="login-email" autocomplete="username" required>
+    <label class="login-label" for="login-password">Passwort</label>
+    <input class="login-input" type="password" id="login-password" autocomplete="current-password" required>
+    <div class="login-error" id="login-error" role="alert"></div>
+    <button class="login-submit" id="login-submit" type="submit">Anmelden</button>
+  </form>
 </div>
 
 <script src="js/supabase.js"></script>

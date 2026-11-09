@@ -1,29 +1,125 @@
 // ── Supabase-Modul ──────────────────────────────────────────────
 // Einziger Ort mit HTTP-Aufrufen gegen Supabase. Wird vor js/app.js geladen.
 // Die Platzhalter werden von der Pipeline (.github/workflows/deploy.yml) ersetzt.
+// Zugriff auf die Daten nur mit angemeldeter Sitzung (Supabase Auth, RLS für
+// die Rolle "authenticated"). Der Anon-Key allein reicht nicht mehr.
 const SUPABASE_URL = (typeof LOCAL_SUPABASE_URL !== 'undefined' ? LOCAL_SUPABASE_URL : 'SUPABASE_URL_PLACEHOLDER').trim();
 const SUPABASE_KEY = (typeof LOCAL_SUPABASE_KEY !== 'undefined' ? LOCAL_SUPABASE_KEY : 'SUPABASE_KEY_PLACEHOLDER').trim();
 
 const SupabaseSync = (() => {
   const USER_ID = 'mario';
+  const SESSION_KEY = 'sb_session';
+  const EMAIL_KEY = 'sb_email';
 
   function isConfigured() {
     return !!SUPABASE_URL && !SUPABASE_URL.includes('PLACEHOLDER');
   }
 
+  // ── Sitzung (localStorage) ────────────────────────────────────
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function saveSession(s) {
+    try {
+      if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+      else localStorage.removeItem(SESSION_KEY);
+    } catch (e) {}
+  }
+  function isLoggedIn() {
+    const s = loadSession();
+    return !!(s && s.access_token && s.refresh_token);
+  }
+  function lastEmail() {
+    try { return localStorage.getItem(EMAIL_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  function toSession(data, fallbackEmail) {
+    return {
+      access_token:  data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at:    Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+      email:         (data.user && data.user.email) || fallbackEmail || '',
+    };
+  }
+
+  // Auth-Endpunkte (Anmelden, Erneuern). Fehler tragen den HTTP-Status.
+  async function authRequest(path, body) {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = new Error(res.status === 400 ? 'E-Mail oder Passwort falsch' : `Anmeldung fehlgeschlagen (${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
+  async function signIn(email, password) {
+    const data = await authRequest('token?grant_type=password', { email, password });
+    saveSession(toSession(data, email));
+    try { localStorage.setItem(EMAIL_KEY, email); } catch (e) {}
+  }
+
+  function signOut() {
+    saveSession(null);
+  }
+
+  // Parallele Erneuerungen zusammenfassen. Nur eindeutige Auth-Fehler
+  // (400/401/403) beenden die Sitzung; Netzfehler lassen sie bestehen.
+  let refreshing = null;
+  function refreshSession() {
+    const s = loadSession();
+    if (!s || !s.refresh_token) return Promise.reject(new Error('AUTH_REQUIRED'));
+    if (!refreshing) {
+      refreshing = authRequest('token?grant_type=refresh_token', { refresh_token: s.refresh_token })
+        .then((data) => {
+          saveSession(toSession(data, s.email));
+          return loadSession();
+        })
+        .catch((e) => {
+          if ([400, 401, 403].includes(e.status)) {
+            saveSession(null);
+            window.dispatchEvent(new Event('sb-auth-required'));
+          }
+          throw e;
+        })
+        .finally(() => { refreshing = null; });
+    }
+    return refreshing;
+  }
+
+  async function currentToken() {
+    let s = loadSession();
+    if (!s || !s.access_token) throw new Error('AUTH_REQUIRED');
+    // Kurz vor Ablauf schon erneuern (60 s Puffer)
+    if (s.expires_at - 60 < Date.now() / 1000) s = await refreshSession();
+    return s.access_token;
+  }
+
   // Wirft bei jedem Status >= 300, damit Aufrufer Fehler sehen.
   async function request(method, table, { query = '', body, prefer = 'return=minimal' } = {}) {
-    const headers = {
-      'apikey':        SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Prefer':        prefer,
+    const send = (token) => {
+      const headers = {
+        'apikey':        SUPABASE_KEY,
+        'Authorization': 'Bearer ' + token,
+        'Prefer':        prefer,
+      };
+      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      return fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
     };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+
+    let res = await send(await currentToken());
+    if (res.status === 401) {
+      // Token abgelaufen oder ungültig: einmal erneuern und wiederholen
+      res = await send((await refreshSession()).access_token);
+    }
     if (!res.ok) {
       throw new Error(`${res.status}: ${await res.text()}`);
     }
@@ -125,7 +221,7 @@ const SupabaseSync = (() => {
   }
 
   return {
-    USER_ID, isConfigured,
+    USER_ID, isConfigured, isLoggedIn, lastEmail, signIn, signOut,
     saveDay, deleteDay, clearDays,
     saveWalk, deleteWalk, clearWalks, pullWalks,
     pullDays,

@@ -62,7 +62,7 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 | `walk_history` | Gespeicherte Geh-Einheiten | `ts` |
 | `lebensmittel` | Custom Foods + gecachte Basisdaten | `(user_id, name)` |
 
-- RLS ist **deaktiviert** (nur persönliche Nutzung)
+- RLS ist **aktiv** (Migration `supabase/2026-11-09-auth-rls.sql`): Zugriff nur für die Rolle `authenticated`, also nur mit Login. Der Anon-Key allein hat keinen Zugriff. `supabase_setup.sql` enthält noch den alten Stand ohne RLS und muss für neue Projekte durch die Migration ergänzt werden.
 - UPSERT-Strategie: **DELETE + INSERT** (wegen UNIQUE constraints)
 - `lebensmittel`: `user_id = '__base__'` für Basisdaten, eigene `user_id` für Custom Foods
 
@@ -181,6 +181,9 @@ Einziger Ort mit HTTP-Zugriffen gegen Supabase. Lädt vor `app.js`. Stellt das O
 
 - `SupabaseSync.USER_ID` — feste Benutzer-ID (`'mario'`)
 - `SupabaseSync.isConfigured()` — `false`, solange die Platzhalter nicht ersetzt sind
+- `SupabaseSync.isLoggedIn()` / `signIn(email, pw)` / `signOut()` / `lastEmail()` — Anmeldung (Sitzung in `localStorage` unter `sb_session`). Alle Requests senden das Access-Token; bei 401 einmal erneuern, bei eindeutigem Auth-Fehler Event `sb-auth-required` auslösen
+- `syncReady()` (app.js) — `isConfigured() && isLoggedIn()`; Schreib-, Lese- und Live-Sync prüfen das statt `isConfigured()`
+- `showLogin()` / `submitLogin(e)` / `onLoggedIn()` / `logoutSupabase()` — Login-Maske und Abmelden
 - Intern: `request(method, table, {query, body, prefer})` — wirft bei Status ≥ 300 mit `"<status>: <text>"`; `replaceByTs`, `deleteByTs`, `clearTable` für Tabellen mit UNIQUE auf `ts` (DELETE + INSERT)
 - `saveDay({ts, date, items, totals})` / `deleteDay(ts)` / `clearDays()` — Purin-Historie (`purin_history`)
 - `saveWalk({ts, date, data})` / `deleteWalk(ts)` / `clearWalks()` / `pullWalks()` — Geh-Historie (`walk_history`)
@@ -275,6 +278,8 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 ## Geräte-Sync
 
 - Die Benutzer-ID ist fest in `js/supabase.js` hinterlegt (`SupabaseSync.USER_ID = 'mario'`), es gibt kein Eingabefeld
-- Alle Geräte mit derselben Konfiguration teilen sich dieselben Daten
+- **Anmeldung:** Passwort-Login über Supabase Auth (E-Mail + Passwort). Ohne gültige Sitzung blockiert die Login-Maske (`#login-overlay`) die App. Die Sitzung liegt im `localStorage` (`sb_session`), das Token wird bei Ablauf automatisch erneuert. Abmelden über den Button „Abmelden“.
+- Die öffentliche Registrierung ist im Supabase-Dashboard **abgeschaltet**; Benutzer wird manuell angelegt (siehe `supabase/2026-11-09-auth-rls.sql`)
+- Alle Geräte mit derselben Konfiguration teilen sich dieselben Daten (nach Anmeldung)
 - **Server überschreibt immer** die lokalen Daten beim Download
 - **Live-Sync** aktualisiert automatisch bei Fensterwechsel (kein manueller Trigger nötig)
