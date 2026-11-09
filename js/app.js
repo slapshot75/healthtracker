@@ -711,7 +711,7 @@ function render() {
       const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${Number(d._customIdx)})" title="Bearbeiten">✎</button>` : '';
       const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${Number(d._customIdx)})" title="Löschen">×</button>` : '';
       return `<tr>
-        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${h(data.indexOf(d))})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
+        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${Number(data.indexOf(d))})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
         <td style="text-align:center;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;">${h(i + 1)}</td>
         <td style="font-weight:500">${h(d.name)}</td>
         <td><span class="cat-badge">${h(d.category)}</span></td>
@@ -834,7 +834,7 @@ function showSuggestions() {
   box.innerHTML = hits.map(d => {
     const level = getLevel(d.purin);
     const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
-    return `<div onclick="selectFood(${h(data.indexOf(d))})">
+    return `<div onclick="selectFood(${Number(data.indexOf(d))})">
       <span class="sug-name">${h(d.name)}</span>
       <span class="sug-meta" style="color:${h(colors[level])}">${h(d.purin)} mg Purin · ${h(d.kcal)} kcal</span>
     </div>`;
@@ -1132,7 +1132,7 @@ function buildHistoryNav(kind, allHistory) {
         <span class="month-chip-count">${h(history.length)} ${h(history.length === 1 ? 'Tag' : 'Tage')}</span></div>
       ${isAll ? '' : `<button class="month-nav-btn" onclick="shiftHistoryMonth('${kind}',-1)" title="Voriger Monat">▲</button>
       <button class="month-nav-btn" onclick="shiftHistoryMonth('${h(kind)}',1)" title="Nächster Monat">▼</button>`}
-      <button class="month-chip" onclick="selectHistoryMonth('${h(kind)}','${h(isAll ? months[0] : 'all')}')">${h(isAll ? 'Nach Monat' : 'Alle')}</button>
+      <button class="month-chip" onclick="selectHistoryMonth('${h(kind)}',${h(JSON.stringify(isAll ? months[0] : 'all'))})">${h(isAll ? 'Nach Monat' : 'Alle')}</button>
     </div>`
     + (isAll || !c.open ? '' : buildHistoryCalendar(kind, c.month, entryDays))
     + (history.length ? '' : '<div class="history-empty">Keine Einträge in diesem Monat.</div>');
@@ -1640,7 +1640,7 @@ function showEditSuggestions() {
   const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
   box.innerHTML = hits.map(d => {
     const col = colors[getLevel(d.purin)];
-    return `<div onclick="selectEditFood(${h(data.indexOf(d))})">
+    return `<div onclick="selectEditFood(${Number(data.indexOf(d))})">
       <span>${h(d.name)}</span>
       <span style="font-size:11px;color:${h(col)}">${h(d.purin)} mg · ${h(d.kcal)} kcal</span>
     </div>`;

@@ -30,3 +30,19 @@ test.describe('Escaping – Historie aus der Datenbank', () => {
     expect(html).toContain('&lt;img');
   });
 });
+
+test.describe('Escaping – Inline-Handler', () => {
+  test('Monats-Chip: onclick ist nach HTML-Decodierung gültiger JavaScript-Code', async ({ page }) => {
+    await setupSupabase(page);
+    await page.evaluate(() => {
+      localStorage.setItem('purin_tracker_history', JSON.stringify([
+        { ts: 1700000000000, date: 'Dienstag, 14.11.2023', items: [], totals: { purin: 0, kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 } },
+      ]));
+      renderHistory();
+    });
+    const attr = await page.locator('.month-chip').first().getAttribute('onclick');
+    // Der Browser hat den HTML-Teil bereits decodiert; der Ausdruck muss als JS parsbar sein
+    expect(() => new Function(attr)).not.toThrow();
+    expect(attr).toMatch(/^selectHistoryMonth\('purin',".*"\)$/);
+  });
+});
