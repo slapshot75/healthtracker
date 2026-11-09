@@ -6,7 +6,7 @@ import { setupSupabase, writesTo, readsFrom } from './support/supabase-mock.js';
 // damit der Umbau in js/supabase.js nichts unbemerkt verändert.
 
 test.describe('Supabase – purin_history Schreiboperationen', () => {
-  test('saveDay: löscht zuerst den Eintrag mit gleichem ts, dann POST mit vollständigem Körper', async ({ page }) => {
+  test('saveDay ohne bestehenden Eintrag: PATCH ohne Treffer, dann POST mit vollständigem Körper', async ({ page }) => {
     const requests = await setupSupabase(page);
 
     await page.evaluate(() => {
@@ -16,19 +16,51 @@ test.describe('Supabase – purin_history Schreiboperationen', () => {
     });
 
     await expect.poll(() => writesTo(requests, 'purin_history').length).toBe(2);
-    const [del, post] = writesTo(requests, 'purin_history');
+    const [patch, post] = writesTo(requests, 'purin_history');
 
-    expect(del.method).toBe('DELETE');
-    expect(del.query).toMatch(/user_id=eq\.mario/);
-    expect(del.query).toMatch(/ts=eq\.\d+/);
+    expect(patch.method).toBe('PATCH');
+    expect(patch.query).toMatch(/user_id=eq\.mario/);
+    expect(patch.query).toMatch(/ts=eq\.\d+/);
+    // Nie vorher löschen: ein fehlgeschlagener POST darf keinen Eintrag entfernen
+    expect(writesTo(requests, 'purin_history').some((r) => r.method === 'DELETE')).toBe(false);
 
     expect(post.method).toBe('POST');
     expect(post.body.user_id).toBe('mario');
-    expect(post.body.ts).toBe(Number(del.query.match(/ts=eq\.(\d+)/)[1]));
+    expect(post.body.ts).toBe(Number(patch.query.match(/ts=eq\.(\d+)/)[1]));
     expect(post.body.items).toHaveLength(1);
     expect(post.body.items[0].name).toBe('Testfood');
     expect(post.body.totals).toMatchObject({ purin: 50, kcal: 100 });
     expect(typeof post.body.date).toBe('string');
+  });
+
+  test('saveDay mit bestehendem Eintrag: nur PATCH, kein DELETE, kein POST', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'PATCH:purin_history': [{ ts: 1 }] });
+
+    await page.evaluate(() => {
+      trackerItems.length = 0;
+      addTrackerItem({ name: 'Testfood', purin: 50, kcal: 100, protein: 5, carbs: 10, fat: 2, fiber: 0 }, 100);
+      saveDay();
+    });
+
+    await expect.poll(() => writesTo(requests, 'purin_history').length).toBe(1);
+    await page.waitForTimeout(300);
+    expect(writesTo(requests, 'purin_history').map((r) => r.method)).toEqual(['PATCH']);
+  });
+
+  test('saveDay: schlägt der POST fehl, wird nichts gelöscht', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'FAIL:POST:purin_history': true });
+
+    await page.evaluate(() => {
+      trackerItems.length = 0;
+      addTrackerItem({ name: 'Testfood', purin: 50, kcal: 100, protein: 5, carbs: 10, fat: 2, fiber: 0 }, 100);
+      saveDay();
+    });
+
+    await expect.poll(() => writesTo(requests, 'purin_history').length).toBe(2);
+    await page.waitForTimeout(300);
+    const methods = writesTo(requests, 'purin_history').map((r) => r.method);
+    expect(methods).toEqual(['PATCH', 'POST']);
+    expect(methods).not.toContain('DELETE');
   });
 
   test('deleteDay: DELETE filtert nach user_id und ts', async ({ page }) => {

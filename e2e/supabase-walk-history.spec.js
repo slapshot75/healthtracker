@@ -6,7 +6,7 @@ import { setupSupabase, writesTo, readsFrom } from './support/supabase-mock.js';
 const WALK = { km: 5, kcal: 300, steps: 6500 };
 
 test.describe('Supabase – walk_history', () => {
-  test('saveWalkDay: DELETE über ts und user_id, dann POST mit data', async ({ page }) => {
+  test('saveWalkDay ohne bestehenden Eintrag: PATCH ohne Treffer, dann POST mit data', async ({ page }) => {
     const requests = await setupSupabase(page);
 
     await page.evaluate((walk) => {
@@ -15,14 +15,14 @@ test.describe('Supabase – walk_history', () => {
     }, WALK);
 
     await expect.poll(() => writesTo(requests, 'walk_history').length).toBe(2);
-    const [del, post] = writesTo(requests, 'walk_history');
+    const [patch, post] = writesTo(requests, 'walk_history');
 
-    expect(del.method).toBe('DELETE');
-    expect(del.query).toMatch(/^\?ts=eq\.\d+&user_id=eq\.mario$/);
+    expect(patch.method).toBe('PATCH');
+    expect(patch.query).toMatch(/^\?ts=eq\.\d+&user_id=eq\.mario$/);
 
     expect(post.method).toBe('POST');
     expect(post.body.user_id).toBe('mario');
-    expect(post.body.ts).toBe(Number(del.query.match(/ts=eq\.(\d+)/)[1]));
+    expect(post.body.ts).toBe(Number(patch.query.match(/ts=eq\.(\d+)/)[1]));
     expect(typeof post.body.date).toBe('string');
     expect(post.body.data).toMatchObject({ ...WALK, ts: post.body.ts, date: post.body.date });
   });

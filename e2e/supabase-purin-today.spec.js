@@ -6,7 +6,7 @@ import { setupSupabase, writesTo, readsFrom } from './support/supabase-mock.js';
 const ITEM = { id: 1, name: 'Testfood', grams: 100, unit: 'g', purin: 50, kcal: 100, protein: 5, carbs: 10, fat: 2, fiber: 0 };
 
 test.describe('Supabase – purin_today', () => {
-  test('saveToStorage: DELETE über user_id, dann POST mit items und settings', async ({ page }) => {
+  test('saveToStorage: PATCH über user_id, ohne Treffer POST mit items und settings, kein DELETE', async ({ page }) => {
     const requests = await setupSupabase(page);
 
     await page.evaluate((item) => {
@@ -15,16 +15,31 @@ test.describe('Supabase – purin_today', () => {
     }, ITEM);
 
     await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(2);
-    const [del, post] = writesTo(requests, 'purin_today');
+    const [patch, post] = writesTo(requests, 'purin_today');
 
-    expect(del.method).toBe('DELETE');
-    expect(del.query).toBe('?user_id=eq.mario');
+    expect(patch.method).toBe('PATCH');
+    expect(patch.query).toBe('?user_id=eq.mario');
+    expect(writesTo(requests, 'purin_today').some((r) => r.method === 'DELETE')).toBe(false);
 
     expect(post.method).toBe('POST');
     expect(post.body.user_id).toBe('mario');
     expect(typeof post.body.ts).toBe('number');
     expect(post.body.items).toEqual([ITEM]);
     expect(post.body.settings).toEqual({ purin_limit: 180, purin_limit_ts: 0 });
+  });
+
+  test('pushToday: schlägt der POST fehl, wird nichts gelöscht', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'FAIL:POST:purin_today': true });
+
+    await page.evaluate((item) => {
+      trackerItems = [item];
+      saveToStorage();
+    }, ITEM);
+
+    await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(2);
+    await page.waitForTimeout(300);
+    const methods = writesTo(requests, 'purin_today').map((r) => r.method);
+    expect(methods).toEqual(['PATCH', 'POST']);
   });
 
   test('liveRefresh: übernimmt neueren Serverstand in den Tracker', async ({ page }) => {

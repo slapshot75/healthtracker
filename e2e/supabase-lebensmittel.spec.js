@@ -62,7 +62,7 @@ test.describe('Supabase – lebensmittel', () => {
     expect(del.query).toBe('?user_id=eq.mario&name=eq.Alt');
   });
 
-  test('syncUpload: DELETE aller eigenen Einträge, dann ein POST je Lebensmittel', async ({ page }) => {
+  test('syncUpload: je Lebensmittel PATCH, ohne Treffer POST; veraltete Einträge zuletzt entfernen', async ({ page }) => {
     const requests = await setupSupabase(page);
     await page.evaluate((food) => {
       customFoods = [food, { ...food, name: 'Zwei' }];
@@ -70,12 +70,32 @@ test.describe('Supabase – lebensmittel', () => {
       syncUpload();
     }, FOOD);
 
-    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(3);
-    const [del, p1, p2] = writesTo(requests, 'lebensmittel');
-    expect(del.method).toBe('DELETE');
-    expect(del.query).toBe('?user_id=eq.mario');
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(5);
+    const [pa1, p1, pa2, p2, del] = writesTo(requests, 'lebensmittel');
+    expect(pa1.method).toBe('PATCH');
+    expect(pa1.query).toBe('?user_id=eq.mario&name=eq.Alt');
+    expect(p1.method).toBe('POST');
     expect(p1.body.name).toBe('Alt');
+    expect(pa2.method).toBe('PATCH');
+    expect(p2.method).toBe('POST');
     expect(p2.body.name).toBe('Zwei');
+    // Löschen erst am Schluss, nur für Namen, die nicht mehr in der Liste stehen
+    expect(del.method).toBe('DELETE');
+    expect(del.query).toBe('?user_id=eq.mario&name=not.in.(' + encodeURIComponent('"Alt","Zwei"') + ')');
+  });
+
+  test('replaceFoods: schlägt ein Schreibvorgang fehl, wird nichts gelöscht', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'FAIL:POST:lebensmittel': true });
+    await page.evaluate((food) => {
+      customFoods = [food];
+      localStorage.setItem('purin_custom_foods', JSON.stringify(customFoods));
+      syncUpload();
+    }, FOOD);
+
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(2);
+    await page.waitForTimeout(300);
+    const methods = writesTo(requests, 'lebensmittel').map((r) => r.method);
+    expect(methods).toEqual(['PATCH', 'POST']);
   });
 
   test('refreshBaseFoodsFromSupabase: liest __base__ sortiert und übernimmt Basisdaten', async ({ page }) => {
@@ -113,8 +133,10 @@ test.describe('Supabase – lebensmittel', () => {
       liveRefresh();
     }, FOOD);
 
+    // Erstmigration läuft über saveFood (nur POST), nicht über replaceFoods
     await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(1);
     const [post] = writesTo(requests, 'lebensmittel');
+    expect(post.method).toBe('POST');
     expect(post.body).toMatchObject({ user_id: 'mario', name: 'Alt' });
   });
 });

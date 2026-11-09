@@ -2,7 +2,7 @@
 // Same-Origin (HTML, CSS, JS, Icons): Network-first, Cache als Fallback,
 // damit Updates sofort ankommen. CDN (Chart.js, feste Version): Cache-first.
 // Supabase und alle anderen Anfragen werden nicht berührt (Daten bleiben live).
-const CACHE = 'healthcheck-v4';
+const CACHE = 'healthcheck-v5';
 const CDN_HOST = 'cdnjs.cloudflare.com';
 
 self.addEventListener('install', (event) => {

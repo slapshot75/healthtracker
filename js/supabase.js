@@ -130,9 +130,16 @@ const SupabaseSync = (() => {
   const userFilter = () => `user_id=eq.${encodeURIComponent(USER_ID)}`;
 
   // ── Gemeinsame Muster für Tabellen mit UNIQUE auf ts ─────────
-  // Vorhandenen Eintrag mit gleichem ts entfernen, dann neu einfügen.
+  // Vorhandenen Eintrag mit gleichem ts aktualisieren; nur wenn keine Zeile
+  // getroffen wurde, neu einfügen. Nie vorher löschen: scheitert der INSERT,
+  // bleibt der bisherige Eintrag erhalten.
   async function replaceByTs(table, row) {
-    await request('DELETE', table, { query: `?ts=eq.${row.ts}&${userFilter()}` });
+    const updated = await request('PATCH', table, {
+      query: `?ts=eq.${row.ts}&${userFilter()}`,
+      body: { user_id: USER_ID, ...row },
+      prefer: 'return=representation',
+    });
+    if (Array.isArray(updated) && updated.length > 0) return;
     await request('POST', table, { body: { user_id: USER_ID, ...row } });
   }
 
@@ -190,19 +197,45 @@ const SupabaseSync = (() => {
     return request('DELETE', 'lebensmittel', { query: `?${userFilter()}&name=eq.${encodeURIComponent(name)}` });
   }
 
-  // Ersetzt alle eigenen Lebensmittel durch die übergebene Liste.
+  // Ersetzt alle eigenen Lebensmittel durch die übergebene Liste, ohne vorher zu löschen:
+  // 1. jeder Eintrag wird per PATCH über den Namen aktualisiert, ohne Treffer per POST angelegt
+  // 2. erst wenn alle Schreibvorgänge erfolgreich waren, werden Einträge entfernt,
+  //    die nicht mehr in der Liste stehen
+  // Scheitert ein Schritt, bleiben bisherige Einträge erhalten.
   async function replaceFoods(foods) {
-    await request('DELETE', 'lebensmittel', { query: `?${userFilter()}` });
     for (const f of foods) {
-      await request('POST', 'lebensmittel', { body: { user_id: USER_ID, ...foodRow(f) } });
+      const row = { user_id: USER_ID, ...foodRow(f) };
+      const updated = await request('PATCH', 'lebensmittel', {
+        query: `?${userFilter()}&name=eq.${encodeURIComponent(f.name)}`,
+        body: row,
+        prefer: 'return=representation',
+      });
+      if (!(Array.isArray(updated) && updated.length > 0)) {
+        await request('POST', 'lebensmittel', { body: row });
+      }
+    }
+    const names = foods.map((f) => f.name);
+    if (names.length === 0) {
+      await request('DELETE', 'lebensmittel', { query: `?${userFilter()}` });
+    } else {
+      // PostgREST-Liste: Namen in doppelte Anführungszeichen, \ und " escapen
+      const list = names.map((n) => '"' + String(n).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"').join(',');
+      await request('DELETE', 'lebensmittel', { query: `?${userFilter()}&name=not.in.(${encodeURIComponent(list)})` });
     }
   }
 
   // ── purin_today ───────────────────────────────────────────────
-  // user_id ist UNIQUE: der Tagesverbrauch wird vollständig ersetzt.
+  // user_id ist UNIQUE: vorhandene Zeile aktualisieren, nur ohne Treffer neu einfügen.
   async function pushToday({ ts, items, settings }) {
-    await request('DELETE', 'purin_today', { query: `?${userFilter()}` });
-    await request('POST', 'purin_today', { body: { user_id: USER_ID, ts, items, settings } });
+    const row = { user_id: USER_ID, ts, items, settings };
+    const updated = await request('PATCH', 'purin_today', {
+      query: `?${userFilter()}`,
+      body: row,
+      prefer: 'return=representation',
+    });
+    if (!(Array.isArray(updated) && updated.length > 0)) {
+      await request('POST', 'purin_today', { body: row });
+    }
   }
 
   // Liefert ein Array mit höchstens einer Zeile (leeres Array, wenn nichts vorliegt).

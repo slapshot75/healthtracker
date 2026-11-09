@@ -53,8 +53,16 @@ export async function setupSupabase(page, responses = {}, { loggedIn = true } = 
       const entry = responses[table];
       const payload = (typeof entry === 'function' ? entry(url.search) : entry) ?? [];
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+    } else if (responses[`FAIL:${req.method()}:${table}`]) {
+      // Simulierter Serverfehler für diese Methode/Tabelle
+      await route.fulfill({ status: 500, contentType: 'text/plain', body: 'simulated failure' });
+    } else if (req.method() === 'PATCH' && responses[`PATCH:${table}`] !== undefined) {
+      // Simulierter PATCH-Treffer: liefert die aktualisierten Zeilen zurück
+      const entry = responses[`PATCH:${table}`];
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(entry) });
     } else {
-      await route.fulfill({ status: 204, body: '' });
+      // Standard: PATCH ohne Treffer (leer), POST/DELETE ohne Inhalt
+      await route.fulfill({ status: req.method() === 'PATCH' ? 200 : 204, contentType: 'application/json', body: req.method() === 'PATCH' ? '[]' : '' });
     }
   });
 
