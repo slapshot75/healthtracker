@@ -1757,21 +1757,59 @@ function switchPage(name) {
   if (name === 'summary') renderSummary();
 }
 
-// ── Gesamtverbrauch: Summe der Kalorien aus Gehrechner und Indoor-Rad ──
-function renderSummary() {
-  const fmt = n => Math.round(n).toLocaleString('de-DE');
-  const sumKcal = list => list.reduce((s, d) => s + (Number(d.kcal) || 0), 0);
-  const walk   = getWalkHistory();
-  const indoor = getIndoorHistory();
-  const walkKcal   = sumKcal(walk);
-  const indoorKcal = sumKcal(indoor);
+// ── Kalorienbilanz: aufgenommen (Purin-Tracker) gegen verbraucht (Gehrechner, Indoor-Rad) ──
+// Liest immer den Serverstand. Ohne Cloud-Verbindung wird nichts aus dem lokalen Speicher angezeigt.
+async function renderSummary() {
+  const status = document.getElementById('sum-status');
+  const fmt    = n => Math.round(n).toLocaleString('de-DE');
+  const sumKcal = (rows, pick) => rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0);
+  const set = (id, text) => { document.getElementById(id).textContent = text; };
+  const clear = () => ['sum-intake','sum-burned','sum-balance','sum-today','sum-walk-kcal','sum-indoor-kcal']
+    .forEach(id => set(id, '—'));
 
-  document.getElementById('sum-kcal').textContent        = fmt(walkKcal + indoorKcal);
-  document.getElementById('sum-count').textContent       = String(walk.length + indoor.length);
-  document.getElementById('sum-walk-kcal').textContent   = fmt(walkKcal);
-  document.getElementById('sum-walk-count').textContent  = walk.length + ' Einheiten · kcal';
-  document.getElementById('sum-indoor-kcal').textContent = fmt(indoorKcal);
-  document.getElementById('sum-indoor-count').textContent = indoor.length + ' Einheiten · kcal';
+  if (!syncReady()) {
+    clear();
+    status.textContent = 'Keine Cloud-Verbindung – bitte anmelden, damit der aktuelle Stand geladen werden kann.';
+    return;
+  }
+
+  status.textContent = 'Wird aus der Cloud geladen…';
+  try {
+    const [days, today, walks, indoor] = await Promise.all([
+      SupabaseSync.pullDays(),
+      SupabaseSync.pullToday(),
+      SupabaseSync.pullWalks(),
+      SupabaseSync.pullIndoor(),
+    ]);
+    if (![days, today, walks, indoor].every(Array.isArray)) throw new Error('Unerwartete Antwort');
+
+    // Heute kommt aus purin_today (Live-Stand), vergangene Tage aus purin_history – kein Doppelzählen.
+    const todayMs     = getDayTs();
+    const todayItems  = today[0]?.items || [];
+    const todayKcal   = sumKcal(todayItems, i => i.kcal);
+    const pastKcal    = sumKcal(days.filter(r => r.ts < todayMs), r => r.totals?.kcal);
+    const intake      = pastKcal + todayKcal;
+
+    const walkKcal    = sumKcal(walks,  r => r.data?.kcal);
+    const indoorKcal  = sumKcal(indoor, r => r.data?.kcal);
+    const burned      = walkKcal + indoorKcal;
+    const balance     = intake - burned;
+
+    set('sum-intake',  fmt(intake));
+    set('sum-burned',  fmt(burned));
+    set('sum-balance', (balance > 0 ? '+' : balance < 0 ? '−' : '±') + fmt(Math.abs(balance)));
+    set('sum-today',   fmt(todayKcal));
+    set('sum-walk-kcal',   fmt(walkKcal));
+    set('sum-walk-count',  walks.length + ' Einheiten · kcal');
+    set('sum-indoor-kcal', fmt(indoorKcal));
+    set('sum-indoor-count', indoor.length + ' Einheiten · kcal');
+    status.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
+      + ' · Purin: letzte 90 Tage · Einheiten: letzte 200 je Art';
+  } catch (e) {
+    logSyncError('Kalorienbilanz laden', e);
+    clear();
+    status.textContent = 'Laden fehlgeschlagen: ' + e.message;
+  }
 }
 
 // ── Gehrechner ──────────────────────────────────────────────────
