@@ -521,28 +521,31 @@
   <div class="page-section" id="page-summary">
 
     <div class="tab-box">
+      <div class="tab-panel active">
       <div style="margin-bottom:1.25rem;">
         <div class="history-title">Kalorienbilanz</div>
         <div class="history-sub">Aufgenommen (Purin-Tracker) gegen verbraucht (Gehrechner und Indoor-Rad) – Stand aus der Cloud</div>
         <div id="sum-status" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
       </div>
-      <div class="walk-grid">
-        <div class="walk-card">
-          <div class="walk-card-title">Bilanz</div>
-          <div class="walk-results">
-            <div class="walk-result"><div class="walk-result-label">Aufgenommen</div><div class="walk-result-val" id="sum-intake">—</div><div class="walk-result-unit">kcal</div></div>
-            <div class="walk-result"><div class="walk-result-label">Verbraucht</div><div class="walk-result-val" id="sum-burned">—</div><div class="walk-result-unit">kcal</div></div>
-            <div class="walk-result highlight"><div class="walk-result-label">Differenz</div><div class="walk-result-val" id="sum-balance">—</div><div class="walk-result-unit">aufgenommen − verbraucht</div></div>
-          </div>
+      <div>
+        <div class="balance-grid">
+          <div class="balance-head"></div>
+          <div class="balance-head">Aufgenommen</div>
+          <div class="balance-head">Verbraucht</div>
+          <div class="balance-head">Differenz</div>
+
+          <div class="balance-label">Gesamt</div>
+          <div class="balance-val" id="sum-intake">—</div>
+          <div class="balance-val" id="sum-burned">—</div>
+          <div class="balance-val balance-diff" id="sum-balance">—</div>
+
+          <div class="balance-label">Heute</div>
+          <div class="balance-val" id="sum-today-intake">—</div>
+          <div class="balance-val" id="sum-today-burned">—</div>
+          <div class="balance-val balance-diff" id="sum-today-balance">—</div>
         </div>
-        <div class="walk-card">
-          <div class="walk-card-title">Details</div>
-          <div class="walk-results">
-            <div class="walk-result"><div class="walk-result-label">Heute aufgenommen</div><div class="walk-result-val" id="sum-today">—</div><div class="walk-result-unit">kcal</div></div>
-            <div class="walk-result"><div class="walk-result-label">Gehrechner</div><div class="walk-result-val" id="sum-walk-kcal">—</div><div class="walk-result-unit" id="sum-walk-count">kcal</div></div>
-            <div class="walk-result"><div class="walk-result-label">Indoor-Rad</div><div class="walk-result-val" id="sum-indoor-kcal">—</div><div class="walk-result-unit" id="sum-indoor-count">kcal</div></div>
-          </div>
-        </div>
+        <div class="balance-unit">kcal · Differenz = aufgenommen − verbraucht</div>
+      </div>
       </div>
     </div>
 

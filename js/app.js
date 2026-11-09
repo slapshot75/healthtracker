@@ -1764,8 +1764,9 @@ async function renderSummary() {
   const fmt    = n => Math.round(n).toLocaleString('de-DE');
   const sumKcal = (rows, pick) => rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0);
   const set = (id, text) => { document.getElementById(id).textContent = text; };
-  const clear = () => ['sum-intake','sum-burned','sum-balance','sum-today','sum-walk-kcal','sum-indoor-kcal']
-    .forEach(id => set(id, '—'));
+  const IDS = ['sum-intake','sum-burned','sum-balance','sum-today-intake','sum-today-burned','sum-today-balance'];
+  const clear = () => IDS.forEach(id => set(id, '—'));
+  const diff = d => (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d));
 
   if (!syncReady()) {
     clear();
@@ -1784,25 +1785,22 @@ async function renderSummary() {
     if (![days, today, walks, indoor].every(Array.isArray)) throw new Error('Unerwartete Antwort');
 
     // Heute kommt aus purin_today (Live-Stand), vergangene Tage aus purin_history – kein Doppelzählen.
-    const todayMs     = getDayTs();
-    const todayItems  = today[0]?.items || [];
-    const todayKcal   = sumKcal(todayItems, i => i.kcal);
-    const pastKcal    = sumKcal(days.filter(r => r.ts < todayMs), r => r.totals?.kcal);
-    const intake      = pastKcal + todayKcal;
+    const todayMs      = getDayTs();
+    const todayIntake  = sumKcal(today[0]?.items || [], i => i.kcal);
+    const pastIntake   = sumKcal(days.filter(r => r.ts < todayMs), r => r.totals?.kcal);
 
-    const walkKcal    = sumKcal(walks,  r => r.data?.kcal);
-    const indoorKcal  = sumKcal(indoor, r => r.data?.kcal);
-    const burned      = walkKcal + indoorKcal;
-    const balance     = intake - burned;
+    // Verbrauch: alle Gehrechner- und Indoor-Einheiten, heute = Zeitstempel ab Mitternacht
+    const burnRows     = [...walks, ...indoor];
+    const todayBurn    = sumKcal(burnRows.filter(r => r.ts >= todayMs), r => r.data?.kcal);
+    const allBurn      = sumKcal(burnRows, r => r.data?.kcal);
 
-    set('sum-intake',  fmt(intake));
-    set('sum-burned',  fmt(burned));
-    set('sum-balance', (balance > 0 ? '+' : balance < 0 ? '−' : '±') + fmt(Math.abs(balance)));
-    set('sum-today',   fmt(todayKcal));
-    set('sum-walk-kcal',   fmt(walkKcal));
-    set('sum-walk-count',  walks.length + ' Einheiten · kcal');
-    set('sum-indoor-kcal', fmt(indoorKcal));
-    set('sum-indoor-count', indoor.length + ' Einheiten · kcal');
+    const allIntake    = pastIntake + todayIntake;
+    set('sum-intake',        fmt(allIntake));
+    set('sum-burned',        fmt(allBurn));
+    set('sum-balance',       diff(allIntake - allBurn));
+    set('sum-today-intake',  fmt(todayIntake));
+    set('sum-today-burned',  fmt(todayBurn));
+    set('sum-today-balance', diff(todayIntake - todayBurn));
     status.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
       + ' · Purin: letzte 90 Tage · Einheiten: letzte 200 je Art';
   } catch (e) {
