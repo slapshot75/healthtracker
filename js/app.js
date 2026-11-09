@@ -711,25 +711,25 @@ function render() {
       const editBtn = d._custom ? `<button class="btn-edit-row" onclick="openEditFoodModal(${Number(d._customIdx)})" title="Bearbeiten">✎</button>` : '';
       const delBtn  = d._custom ? `<button class="btn-del-row" onclick="deleteCustomFood(${Number(d._customIdx)})" title="Löschen">×</button>` : '';
       return `<tr>
-        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${data.indexOf(d)})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
-        <td style="text-align:center;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;">${i + 1}</td>
+        <td style="padding:8px 6px 8px 14px;"><div style="display:flex;gap:4px;align-items:center;"><button class="btn-add-row" onclick="quickAdd(${h(data.indexOf(d))})" title="${h(d.name)} hinzufügen (100 g)">+</button>${editBtn}${delBtn}</div></td>
+        <td style="text-align:center;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;">${h(i + 1)}</td>
         <td style="font-weight:500">${h(d.name)}</td>
         <td><span class="cat-badge">${h(d.category)}</span></td>
         <td>
           <div class="purin-bar">
-            <span class="num">${d.purin}</span>
-            <div class="bar-bg"><div class="bar-fill bar-${level}" style="width:${pct}%"></div></div>
+            <span class="num">${h(d.purin)}</span>
+            <div class="bar-bg"><div class="bar-fill bar-${h(level)}" style="width:${h(pct)}%"></div></div>
           </div>
         </td>
-        <td style="font-variant-numeric:tabular-nums;">${d.kcal}</td>
-        <td style="font-variant-numeric:tabular-nums;">${d.protein.toFixed(1)} g</td>
-        <td style="font-variant-numeric:tabular-nums;">${d.carbs.toFixed(1)} g</td>
-        <td style="font-variant-numeric:tabular-nums;">${d.fiber.toFixed(1)} g</td>
-        <td style="font-variant-numeric:tabular-nums;">${d.fat.toFixed(1)} g</td>
-        <td><span class="level-badge badge-${level}">${getLevelLabel(level)}</span></td>
+        <td style="font-variant-numeric:tabular-nums;">${h(d.kcal)}</td>
+        <td style="font-variant-numeric:tabular-nums;">${h(d.protein.toFixed(1))} g</td>
+        <td style="font-variant-numeric:tabular-nums;">${h(d.carbs.toFixed(1))} g</td>
+        <td style="font-variant-numeric:tabular-nums;">${h(d.fiber.toFixed(1))} g</td>
+        <td style="font-variant-numeric:tabular-nums;">${h(d.fat.toFixed(1))} g</td>
+        <td><span class="level-badge badge-${h(level)}">${h(getLevelLabel(level))}</span></td>
         <td>
-          <span class="rec-badge rec-${rec}">${getRecLabel(rec)}</span>
-          <div style="font-size:11px;color:var(--text);margin-top:3px;">${getRecDetail(rec)}</div>
+          <span class="rec-badge rec-${h(rec)}">${h(getRecLabel(rec))}</span>
+          <div style="font-size:11px;color:var(--text);margin-top:3px;">${h(getRecDetail(rec))}</div>
         </td>
       </tr>`;
     }).join("");
@@ -739,10 +739,10 @@ function render() {
   const avg = total ? Math.round(rows.reduce((s,d) => s+d.purin, 0) / total) : 0;
   const maxRow = rows.length ? rows.reduce((a,b) => a.purin > b.purin ? a : b) : null;
   document.getElementById("stats").innerHTML = `
-    <div class="stat"><div class="stat-label">Einträge</div><div class="stat-value">${total}</div></div>
-    <div class="stat"><div class="stat-label">Durchschnitt</div><div class="stat-value">${avg} mg</div></div>
+    <div class="stat"><div class="stat-label">Einträge</div><div class="stat-value">${h(total)}</div></div>
+    <div class="stat"><div class="stat-label">Durchschnitt</div><div class="stat-value">${h(avg)} mg</div></div>
     <div class="stat"><div class="stat-label">Höchster Wert</div><div class="stat-value small">${maxRow ? h(maxRow.name) : "–"}</div></div>
-    <div class="stat"><div class="stat-label">Max. Purin</div><div class="stat-value">${maxRow ? maxRow.purin : 0} mg</div></div>
+    <div class="stat"><div class="stat-label">Max. Purin</div><div class="stat-value">${h(maxRow ? maxRow.purin : 0)} mg</div></div>
   `;
 }
 
@@ -765,7 +765,7 @@ function quickAdd(idx) {
   const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
   document.getElementById("modal-name").textContent = food.name;
   document.getElementById("modal-meta").innerHTML =
-    `<span style="color:${colors[level]}">${food.purin} mg Purin</span> &nbsp;·&nbsp; ${food.kcal} kcal / 100 g`;
+    `<span style="color:${h(colors[level])}">${h(food.purin)} mg Purin</span> &nbsp;·&nbsp; ${h(food.kcal)} kcal / 100 g`;
   document.getElementById("modal-grams").value = 100;
   document.getElementById("modal-unit").value = 'g';
   updatePreview();
@@ -782,13 +782,13 @@ function updatePreview() {
   const level = getLevel(food.purin);
   const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
   document.getElementById("modal-preview").innerHTML = `
-    <div class="modal-preview-item"><span>Purin</span><span style="color:${colors[level]}">${Math.round(food.purin*f)} mg</span></div>
-    <div class="modal-preview-item"><span>Kalorien</span><span>${Math.round(food.kcal*f)} kcal</span></div>
-    <div class="modal-preview-item"><span>Eiweiß</span><span>${(food.protein*f).toFixed(1)} g</span></div>
-    <div class="modal-preview-item"><span>Kohlenhydrate</span><span>${(food.carbs*f).toFixed(1)} g</span></div>
-    <div class="modal-preview-item"><span>Ballaststoffe</span><span>${(food.fiber*f).toFixed(1)} g</span></div>
-    <div class="modal-preview-item"><span>Fett</span><span>${(food.fat*f).toFixed(1)} g</span></div>
-    <div class="modal-preview-item"><span>Menge</span><span>${g} ${unit}</span></div>
+    <div class="modal-preview-item"><span>Purin</span><span style="color:${h(colors[level])}">${h(Math.round(food.purin*f))} mg</span></div>
+    <div class="modal-preview-item"><span>Kalorien</span><span>${h(Math.round(food.kcal*f))} kcal</span></div>
+    <div class="modal-preview-item"><span>Eiweiß</span><span>${h((food.protein*f).toFixed(1))} g</span></div>
+    <div class="modal-preview-item"><span>Kohlenhydrate</span><span>${h((food.carbs*f).toFixed(1))} g</span></div>
+    <div class="modal-preview-item"><span>Ballaststoffe</span><span>${h((food.fiber*f).toFixed(1))} g</span></div>
+    <div class="modal-preview-item"><span>Fett</span><span>${h((food.fat*f).toFixed(1))} g</span></div>
+    <div class="modal-preview-item"><span>Menge</span><span>${h(g)} ${h(unit)}</span></div>
   `;
 }
 
@@ -834,9 +834,9 @@ function showSuggestions() {
   box.innerHTML = hits.map(d => {
     const level = getLevel(d.purin);
     const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
-    return `<div onclick="selectFood(${data.indexOf(d)})">
+    return `<div onclick="selectFood(${h(data.indexOf(d))})">
       <span class="sug-name">${h(d.name)}</span>
-      <span class="sug-meta" style="color:${colors[level]}">${d.purin} mg Purin · ${d.kcal} kcal</span>
+      <span class="sug-meta" style="color:${h(colors[level])}">${h(d.purin)} mg Purin · ${h(d.kcal)} kcal</span>
     </div>`;
   }).join("");
   box.style.display = "block";
@@ -1129,10 +1129,10 @@ function buildHistoryNav(kind, allHistory) {
   if (!isAll && c.day) history = history.filter(d => dayOf(d) === c.day);
   const html = `<div class="cal-head">
       <div class="cal-title"${isAll ? '' : ` onclick="toggleHistoryCal('${kind}')" style="cursor:pointer" title="Kalender ein-/ausklappen"`}>${isAll ? '' : `<span class="cal-chevron">${c.open ? '▾' : '▸'}</span> `}${isAll ? 'Alle Monate' : h(monthLabel(c.month))}
-        <span class="month-chip-count">${history.length} ${history.length === 1 ? 'Tag' : 'Tage'}</span></div>
+        <span class="month-chip-count">${h(history.length)} ${h(history.length === 1 ? 'Tag' : 'Tage')}</span></div>
       ${isAll ? '' : `<button class="month-nav-btn" onclick="shiftHistoryMonth('${kind}',-1)" title="Voriger Monat">▲</button>
-      <button class="month-nav-btn" onclick="shiftHistoryMonth('${kind}',1)" title="Nächster Monat">▼</button>`}
-      <button class="month-chip" onclick="selectHistoryMonth('${kind}','${isAll ? months[0] : 'all'}')">${isAll ? 'Nach Monat' : 'Alle'}</button>
+      <button class="month-nav-btn" onclick="shiftHistoryMonth('${h(kind)}',1)" title="Nächster Monat">▼</button>`}
+      <button class="month-chip" onclick="selectHistoryMonth('${h(kind)}','${h(isAll ? months[0] : 'all')}')">${h(isAll ? 'Nach Monat' : 'Alle')}</button>
     </div>`
     + (isAll || !c.open ? '' : buildHistoryCalendar(kind, c.month, entryDays))
     + (history.length ? '' : '<div class="history-empty">Keine Einträge in diesem Monat.</div>');
@@ -1153,30 +1153,30 @@ function renderHistory() {
     const col = purinColor(t.purin);
     const itemsHtml = day.items.map(it =>
       `<div class="history-day-item">
-        <span class="history-day-item-name">${h(it.name)} (${it.grams} g)</span>
-        <span>${it.purin} mg</span>
+        <span class="history-day-item-name">${h(it.name)} (${h(it.grams)} g)</span>
+        <span>${h(it.purin)} mg</span>
       </div>`
     ).join('');
     return `<div class="history-day">
       <div class="history-day-header" onclick="toggleDay(${Number(day.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-          <div class="history-day-date">${day.date}</div>
+          <div class="history-day-date">${h(day.date)}</div>
           <div class="history-day-summary">
-            <span class="history-day-pill"><strong style="color:${col}">${t.purin} mg</strong> Purin</span>
-            <span class="history-day-pill"><strong>${t.kcal}</strong> kcal</span>
-            <span class="history-day-pill">E: <strong>${t.protein} g</strong></span>
-            <span class="history-day-pill">KH: <strong>${t.carbs} g</strong></span>
-            <span class="history-day-pill">F: <strong>${t.fat} g</strong></span>
+            <span class="history-day-pill"><strong style="color:${h(col)}">${h(t.purin)} mg</strong> Purin</span>
+            <span class="history-day-pill"><strong>${h(t.kcal)}</strong> kcal</span>
+            <span class="history-day-pill">E: <strong>${h(t.protein)} g</strong></span>
+            <span class="history-day-pill">KH: <strong>${h(t.carbs)} g</strong></span>
+            <span class="history-day-pill">F: <strong>${h(t.fat)} g</strong></span>
           </div>
         </div>
         <button class="history-day-del" onclick="event.stopPropagation();openEditModal(${Number(day.ts)})" title="Tag bearbeiten" style="color:var(--text2);font-size:14px;margin-right:2px;">✎</button>
         <button class="history-day-del" onclick="event.stopPropagation();deleteDay(${Number(day.ts)})" title="Tag löschen">×</button>
       </div>
-      <div class="history-purin-bar" style="margin:0 14px 0;"><div class="history-purin-fill" style="width:${pct}%;background:${col}"></div></div>
-      <div class="history-day-body" id="hday-${day.ts}">
+      <div class="history-purin-bar" style="margin:0 14px 0;"><div class="history-purin-fill" style="width:${h(pct)}%;background:${h(col)}"></div></div>
+      <div class="history-day-body" id="hday-${h(day.ts)}">
         <div class="history-day-items">${itemsHtml}</div>
         <div style="font-size:12px;color:var(--text2);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);">
-          Ballaststoffe: ${t.fiber} g &nbsp;·&nbsp; ${day.items.length} Einträge
+          Ballaststoffe: ${h(t.fiber)} g &nbsp;·&nbsp; ${h(day.items.length)} Einträge
         </div>
       </div>
     </div>`;
@@ -1211,11 +1211,11 @@ function renderTracker() {
     return `<div class="tracker-item">
       <div>
         <div class="tracker-item-name">${h(item.name)}</div>
-        <div class="tracker-item-meta" style="color:${colors[lvl]}">
-          ${item.purin} mg Purin &nbsp;·&nbsp; ${item.kcal} kcal &nbsp;·&nbsp; E: ${item.protein} g &nbsp;·&nbsp; KH: ${item.carbs} g &nbsp;·&nbsp; F: ${item.fat} g
+        <div class="tracker-item-meta" style="color:${h(colors[lvl])}">
+          ${h(item.purin)} mg Purin &nbsp;·&nbsp; ${h(item.kcal)} kcal &nbsp;·&nbsp; E: ${h(item.protein)} g &nbsp;·&nbsp; KH: ${h(item.carbs)} g &nbsp;·&nbsp; F: ${h(item.fat)} g
         </div>
       </div>
-      <div class="tracker-item-g">${item.grams} ${item.unit || 'g'}</div>
+      <div class="tracker-item-g">${h(item.grams)} ${h(item.unit || 'g')}</div>
       <button class="tracker-item-del" onclick="removeTrackerItem(${Number(item.id)})">×</button>
     </div>`;
   }).join("");
@@ -1544,9 +1544,9 @@ function renderEditItems() {
     return `<div class="edit-item">
       <div>
         <div class="edit-item-name">${h(item.name)}</div>
-        <div class="edit-item-meta" style="color:${colors[lvl]}">${item.purin} mg · ${item.kcal} kcal</div>
+        <div class="edit-item-meta" style="color:${h(colors[lvl])}">${h(item.purin)} mg · ${h(item.kcal)} kcal</div>
       </div>
-      <input class="edit-item-grams" type="number" min="1" max="5000" value="${item.grams}"
+      <input class="edit-item-grams" type="number" min="1" max="5000" value="${h(item.grams)}"
         oninput="updateEditGrams(${Number(item.id)}, this.value)" style="height:30px;font-size:13px;text-align:center;width:72px;">
       <button class="edit-item-del" onclick="removeEditItem(${Number(item.id)})">×</button>
     </div>`;
@@ -1556,12 +1556,12 @@ function renderEditItems() {
   const t = calcTotals(editDayItems);
   const col = purinColor(t.purin);
   document.getElementById('edit-totals').innerHTML = `
-    <div class="edit-total"><div class="edit-total-label">Purin</div><div class="edit-total-val" style="color:${col}">${t.purin} mg</div></div>
-    <div class="edit-total"><div class="edit-total-label">kcal</div><div class="edit-total-val">${t.kcal}</div></div>
-    <div class="edit-total"><div class="edit-total-label">Eiweiß</div><div class="edit-total-val">${t.protein} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">KH</div><div class="edit-total-val">${t.carbs} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">Fett</div><div class="edit-total-val">${t.fat} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">Ballaststoffe</div><div class="edit-total-val">${t.fiber} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Purin</div><div class="edit-total-val" style="color:${h(col)}">${h(t.purin)} mg</div></div>
+    <div class="edit-total"><div class="edit-total-label">kcal</div><div class="edit-total-val">${h(t.kcal)}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Eiweiß</div><div class="edit-total-val">${h(t.protein)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">KH</div><div class="edit-total-val">${h(t.carbs)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Fett</div><div class="edit-total-val">${h(t.fat)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Ballaststoffe</div><div class="edit-total-val">${h(t.fiber)} g</div></div>
   `;
 }
 
@@ -1587,12 +1587,12 @@ function updateEditGrams(id, val) {
   const t = calcTotals(editDayItems);
   const col = purinColor(t.purin);
   document.getElementById('edit-totals').innerHTML = `
-    <div class="edit-total"><div class="edit-total-label">Purin</div><div class="edit-total-val" style="color:${col}">${t.purin} mg</div></div>
-    <div class="edit-total"><div class="edit-total-label">kcal</div><div class="edit-total-val">${t.kcal}</div></div>
-    <div class="edit-total"><div class="edit-total-label">Eiweiß</div><div class="edit-total-val">${t.protein} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">KH</div><div class="edit-total-val">${t.carbs} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">Fett</div><div class="edit-total-val">${t.fat} g</div></div>
-    <div class="edit-total"><div class="edit-total-label">Ballaststoffe</div><div class="edit-total-val">${t.fiber} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Purin</div><div class="edit-total-val" style="color:${h(col)}">${h(t.purin)} mg</div></div>
+    <div class="edit-total"><div class="edit-total-label">kcal</div><div class="edit-total-val">${h(t.kcal)}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Eiweiß</div><div class="edit-total-val">${h(t.protein)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">KH</div><div class="edit-total-val">${h(t.carbs)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Fett</div><div class="edit-total-val">${h(t.fat)} g</div></div>
+    <div class="edit-total"><div class="edit-total-label">Ballaststoffe</div><div class="edit-total-val">${h(t.fiber)} g</div></div>
   `;
 }
 
@@ -1611,9 +1611,9 @@ function showEditSuggestions() {
   const colors = {low:"#639922",medium:"#EF9F27",high:"#D85A30","very-high":"#E24B4A"};
   box.innerHTML = hits.map(d => {
     const col = colors[getLevel(d.purin)];
-    return `<div onclick="selectEditFood(${data.indexOf(d)})">
+    return `<div onclick="selectEditFood(${h(data.indexOf(d))})">
       <span>${h(d.name)}</span>
-      <span style="font-size:11px;color:${col}">${d.purin} mg · ${d.kcal} kcal</span>
+      <span style="font-size:11px;color:${h(col)}">${h(d.purin)} mg · ${h(d.kcal)} kcal</span>
     </div>`;
   }).join('');
   box.style.display = 'block';
@@ -1797,13 +1797,13 @@ function calcWalk() {
                    grade < 30  ? 'sehr steil' : 'extrem steil';
 
   document.getElementById('walk-info').innerHTML =
-    `<strong>Zusammenfassung:</strong> Bei ${speed.toFixed(1)} km/h und ${grade.toFixed(0)} % Steigung (${grade_text}) 
-    über ${duration} Minuten legst du etwa <strong>${distM.toLocaleString('de-DE')} m</strong> zurück 
-    und überwindest <strong>${elevM} Höhenmeter</strong>. 
-    Die Belastung entspricht MET ${metR} – das ist <strong>${intensity_text}</strong>. 
-    Du verbrennst ca. <strong>${kcalTotal} kcal</strong> und solltest mindestens 
-    <strong>${water} ml</strong> trinken. Deine Herzfrequenz liegt schätzungsweise bei 
-    <strong>${hr} bpm</strong>.`;
+    `<strong>Zusammenfassung:</strong> Bei ${h(speed.toFixed(1))} km/h und ${h(grade.toFixed(0))} % Steigung (${h(grade_text)}) 
+    über ${h(duration)} Minuten legst du etwa <strong>${h(distM.toLocaleString('de-DE'))} m</strong> zurück 
+    und überwindest <strong>${h(elevM)} Höhenmeter</strong>. 
+    Die Belastung entspricht MET ${h(metR)} – das ist <strong>${h(intensity_text)}</strong>. 
+    Du verbrennst ca. <strong>${h(kcalTotal)} kcal</strong> und solltest mindestens 
+    <strong>${h(water)} ml</strong> trinken. Deine Herzfrequenz liegt schätzungsweise bei 
+    <strong>${h(hr)} bpm</strong>.`;
 
   // Store for saving
   lastWalkResult = { weight, speed, grade, duration, age, sex, dist: distM, elev: elevM, kcal: kcalTotal, kcalMin: kcalMinR, met: metR, hr, steps, water };
@@ -1952,13 +1952,13 @@ function calcWalkEdit() {
   const steps    = Math.round(distM / stepLen);
   const water    = Math.round((500 * hours) + (kcalTotal / 100) * 100);
   document.getElementById('ewalk-results').innerHTML = `
-    <div class="edit-total"><div class="edit-total-label">Strecke</div><div class="edit-total-val">${distM.toLocaleString('de-DE')} m</div></div>
-    <div class="edit-total"><div class="edit-total-label">Höhenmeter</div><div class="edit-total-val">${elevM} m</div></div>
-    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${kcalTotal} kcal</div></div>
-    <div class="edit-total"><div class="edit-total-label">MET</div><div class="edit-total-val">${metR}</div></div>
-    <div class="edit-total"><div class="edit-total-label">Herzfrequenz</div><div class="edit-total-val">${hr} bpm</div></div>
-    <div class="edit-total"><div class="edit-total-label">Schritte</div><div class="edit-total-val">${steps.toLocaleString('de-DE')}</div></div>
-    <div class="edit-total"><div class="edit-total-label">Wasser</div><div class="edit-total-val">${water} ml</div></div>`;
+    <div class="edit-total"><div class="edit-total-label">Strecke</div><div class="edit-total-val">${h(distM.toLocaleString('de-DE'))} m</div></div>
+    <div class="edit-total"><div class="edit-total-label">Höhenmeter</div><div class="edit-total-val">${h(elevM)} m</div></div>
+    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${h(kcalTotal)} kcal</div></div>
+    <div class="edit-total"><div class="edit-total-label">MET</div><div class="edit-total-val">${h(metR)}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Herzfrequenz</div><div class="edit-total-val">${h(hr)} bpm</div></div>
+    <div class="edit-total"><div class="edit-total-label">Schritte</div><div class="edit-total-val">${h(steps.toLocaleString('de-DE'))}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Wasser</div><div class="edit-total-val">${h(water)} ml</div></div>`;
   return { weight, speed, grade, duration, age, sex, dist: distM, elev: elevM, kcal: kcalTotal, kcalMin: Math.round(kcalMin*10)/10, met: metR, hr, steps, water };
 }
 
@@ -2025,20 +2025,20 @@ function renderWalkHistory() {
     <div class="walk-history-day">
       <div class="walk-history-hdr" onclick="toggleWalkDay(${Number(d.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
-          <div class="walk-history-date">${d.date}</div>
+          <div class="walk-history-date">${h(d.date)}</div>
           <div class="walk-history-pills">
-            <span class="walk-history-pill"><strong style="color:#378ADD">${d.dist.toLocaleString('de-DE')} m</strong></span>
-            <span class="walk-history-pill"><strong>${d.elev}</strong> Hm</span>
-            <span class="walk-history-pill"><strong>${d.kcal}</strong> kcal</span>
-            <span class="walk-history-pill"><strong>${d.steps.toLocaleString('de-DE')}</strong> Schritte</span>
-            <span class="walk-history-pill">${d.speed.toFixed(1)} km/h · ${d.grade.toFixed(0)} % · ${d.duration} min</span>
+            <span class="walk-history-pill"><strong style="color:#378ADD">${h(d.dist.toLocaleString('de-DE'))} m</strong></span>
+            <span class="walk-history-pill"><strong>${h(d.elev)}</strong> Hm</span>
+            <span class="walk-history-pill"><strong>${h(d.kcal)}</strong> kcal</span>
+            <span class="walk-history-pill"><strong>${h(d.steps.toLocaleString('de-DE'))}</strong> Schritte</span>
+            <span class="walk-history-pill">${h(d.speed.toFixed(1))} km/h · ${h(d.grade.toFixed(0))} % · ${h(d.duration)} min</span>
           </div>
         </div>
         <button class="walk-history-edit" onclick="event.stopPropagation();openEditWalkModal(${Number(d.ts)})" title="Bearbeiten">✎</button>
         <button class="walk-history-del" onclick="event.stopPropagation();deleteWalkDay(${Number(d.ts)})">×</button>
       </div>
       <div class="walk-history-body" id="wday-${Number(d.ts)}">
-        MET ${d.met} · Ø ${d.hr} bpm · ${d.water} ml Trinkbedarf · Gewicht ${d.weight} kg · ${d.sex === 'm' ? 'Männlich' : 'Weiblich'} · Alter ${d.age}
+        MET ${h(d.met)} · Ø ${h(d.hr)} bpm · ${h(d.water)} ml Trinkbedarf · Gewicht ${h(d.weight)} kg · ${h(d.sex === 'm' ? 'Männlich' : 'Weiblich')} · Alter ${h(d.age)}
       </div>
     </div>`).join('') + '</div>';
 }
@@ -2636,9 +2636,9 @@ function computeIndoor(v) {
 function indoorSummaryHtml(r) {
   const ifText  = r.if < 0.75 ? 'locker' : r.if < 0.85 ? 'moderat' : r.if < 1.05 ? 'an der Schwelle' : 'über der Schwelle';
   const tssText = r.tss < 150 ? 'gering' : r.tss < 300 ? 'mittel' : r.tss < 450 ? 'hoch' : 'sehr hoch';
-  return `<strong>Zusammenfassung:</strong> ${r.dur} min mit Ø ${Math.round(r.watts)} W und NP ${Math.round(r.np)} W
-    (IF ${r.if.toFixed(2)}, ${ifText}). Das ergibt <strong>${r.tss} TSS</strong> (${tssText}) und
-    <strong>${r.kcal} kcal</strong> bei ${r.eff} % Wirkungsgrad.`;
+  return `<strong>Zusammenfassung:</strong> ${h(r.dur)} min mit Ø ${h(Math.round(r.watts))} W und NP ${h(Math.round(r.np))} W
+    (IF ${h(r.if.toFixed(2))}, ${h(ifText)}). Das ergibt <strong>${h(r.tss)} TSS</strong> (${h(tssText)}) und
+    <strong>${h(r.kcal)} kcal</strong> bei ${h(r.eff)} % Wirkungsgrad.`;
 }
 
 // Slider → Zahlenfeld, danach neu berechnen
@@ -2758,20 +2758,20 @@ function renderIndoorHistory() {
     <div class="walk-history-day">
       <div class="walk-history-hdr" onclick="toggleIndoorRide(${Number(d.ts)})">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
-          <div class="walk-history-date">${d.date}</div>
+          <div class="walk-history-date">${h(d.date)}</div>
           <div class="walk-history-pills">
-            <span class="walk-history-pill"><strong style="color:#378ADD">${d.tss}</strong> TSS</span>
-            <span class="walk-history-pill"><strong>${d.if.toFixed(2)}</strong> IF</span>
-            <span class="walk-history-pill"><strong>${d.kcal}</strong> kcal</span>
-            <span class="walk-history-pill"><strong>${Math.round(d.watts)}</strong> W Ø</span>
-            <span class="walk-history-pill">${d.dur} min · ${d.dist} km · ${d.elev} Hm</span>
+            <span class="walk-history-pill"><strong style="color:#378ADD">${h(d.tss)}</strong> TSS</span>
+            <span class="walk-history-pill"><strong>${h(d.if.toFixed(2))}</strong> IF</span>
+            <span class="walk-history-pill"><strong>${h(d.kcal)}</strong> kcal</span>
+            <span class="walk-history-pill"><strong>${h(Math.round(d.watts))}</strong> W Ø</span>
+            <span class="walk-history-pill">${h(d.dur)} min · ${h(d.dist)} km · ${h(d.elev)} Hm</span>
           </div>
         </div>
         <button class="walk-history-edit" onclick="event.stopPropagation();openEditIndoorModal(${Number(d.ts)})" title="Bearbeiten">✎</button>
         <button class="walk-history-del" onclick="event.stopPropagation();deleteIndoorRide(${Number(d.ts)})">×</button>
       </div>
       <div class="walk-history-body" id="iday-${Number(d.ts)}">
-        NP ${Math.round(d.np)} W · FTP ${d.ftp} W · Trittfrequenz ${d.cad} U/min · Ø ${d.speed} km/h · Wirkungsgrad ${d.eff} % · ${d.kj} kJ
+        NP ${h(Math.round(d.np))} W · FTP ${h(d.ftp)} W · Trittfrequenz ${h(d.cad)} U/min · Ø ${h(d.speed)} km/h · Wirkungsgrad ${h(d.eff)} % · ${h(d.kj)} kJ
       </div>
     </div>`).join('') + '</div>';
 }
@@ -2841,11 +2841,11 @@ function calcIndoorEdit() {
     return null;
   }
   box.innerHTML = `
-    <div class="edit-total"><div class="edit-total-label">TSS</div><div class="edit-total-val">${r.tss}</div></div>
-    <div class="edit-total"><div class="edit-total-label">IF</div><div class="edit-total-val">${r.if.toFixed(2)}</div></div>
-    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${r.kcal} kcal</div></div>
-    <div class="edit-total"><div class="edit-total-label">Arbeit</div><div class="edit-total-val">${r.kj} kJ</div></div>
-    <div class="edit-total"><div class="edit-total-label">Ø Tempo</div><div class="edit-total-val">${r.speed} km/h</div></div>`;
+    <div class="edit-total"><div class="edit-total-label">TSS</div><div class="edit-total-val">${h(r.tss)}</div></div>
+    <div class="edit-total"><div class="edit-total-label">IF</div><div class="edit-total-val">${h(r.if.toFixed(2))}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${h(r.kcal)} kcal</div></div>
+    <div class="edit-total"><div class="edit-total-label">Arbeit</div><div class="edit-total-val">${h(r.kj)} kJ</div></div>
+    <div class="edit-total"><div class="edit-total-label">Ø Tempo</div><div class="edit-total-val">${h(r.speed)} km/h</div></div>`;
   return r;
 }
 
