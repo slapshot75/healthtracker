@@ -43,21 +43,6 @@ CREATE INDEX IF NOT EXISTS idx_purin_history_user  ON purin_history (user_id, ts
 CREATE INDEX IF NOT EXISTS idx_walk_history_user   ON walk_history  (user_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_purin_today_user    ON purin_today   (user_id);
 
--- ================================================================
--- ROW LEVEL SECURITY (empfohlen für Produktion)
--- Deaktiviert für einfaches Setup – aktiviere wenn gewünscht:
--- ================================================================
-
--- RLS aktivieren (auskommentiert lassen für einfaches Setup):
--- ALTER TABLE purin_history ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE walk_history  ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE purin_today   ENABLE ROW LEVEL SECURITY;
-
--- Policies (falls RLS aktiviert):
--- CREATE POLICY "user_owns_data" ON purin_history FOR ALL USING (true);
--- CREATE POLICY "user_owns_data" ON walk_history  FOR ALL USING (true);
--- CREATE POLICY "user_owns_data" ON purin_today   FOR ALL USING (true);
-
 -- Tabelle: Lebensmittel (Basis-DB + benutzerdefinierte Einträge)
 -- user_id = '__base__' für die 455 Standard-Einträge
 -- user_id = <Geräte-ID> für eigene Einträge
@@ -79,6 +64,26 @@ CREATE INDEX IF NOT EXISTS idx_lebensmittel_user ON lebensmittel (user_id);
 -- Constraint nachträglich hinzufügen falls Tabelle bereits ohne ihn existiert:
 ALTER TABLE lebensmittel DROP CONSTRAINT IF EXISTS lebensmittel_user_id_name_key;
 ALTER TABLE lebensmittel ADD CONSTRAINT lebensmittel_user_id_name_key UNIQUE (user_id, name);
+
+-- ================================================================
+-- ROW LEVEL SECURITY: Zugriff nur mit Login (Rolle "authenticated")
+-- Voraussetzung: Benutzer im Dashboard angelegt und Registrierung abgeschaltet
+-- (siehe supabase/2026-11-09-auth-rls.sql). Ohne RLS wäre der öffentliche
+-- Anon-Key im Quelltext vollwertiger Schlüssel zu allen Daten.
+-- ================================================================
+ALTER TABLE purin_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purin_today   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE walk_history  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lebensmittel  ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS authenticated_full_access ON purin_history;
+CREATE POLICY authenticated_full_access ON purin_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON purin_today;
+CREATE POLICY authenticated_full_access ON purin_today FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON walk_history;
+CREATE POLICY authenticated_full_access ON walk_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON lebensmittel;
+CREATE POLICY authenticated_full_access ON lebensmittel FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ================================================================
 -- BASIS-LEBENSMITTEL (455 Einträge) – nur einmalig ausführen!
