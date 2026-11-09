@@ -2214,6 +2214,7 @@ async function syncUpload() {
     for (const day of getIndoorHistory()) {
       await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
     }
+    markIndoorSynced();
     // Upsert today
     if (today.length) {
       await SupabaseSync.pushToday({
@@ -2293,6 +2294,7 @@ async function syncDownload() {
     const mergedIndoor = Array.from(indoorMap.values()).sort((a, b) => b.ts - a.ts);
     if (mergedIndoor.length > 200) mergedIndoor.splice(200);
     localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(mergedIndoor));
+    markIndoorSynced();
 
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
@@ -2411,20 +2413,20 @@ async function liveRefresh() {
     // Indoor-Historie holen
     const indoorRows = await SupabaseSync.pullIndoor();
     if (indoorRows?.length) {
-      const remoteTs = JSON.stringify(indoorRows.map(r => r.ts));
-      const localTs  = JSON.stringify(getIndoorHistory().map(d => d.ts));
-      if (remoteTs !== localTs) {
-        localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(
-          indoorRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }))));
+      const remoteList = indoorRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
+      if (indoorCanon(remoteList) !== indoorCanon(getIndoorHistory())) {
+        localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(remoteList));
         renderIndoorHistory();
         if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
       }
-    } else if (indoorRows !== null && getIndoorHistory().length > 0) {
-      // Kein DB-Eintrag → Erstmigration: lokale Indoor-Historie hochladen
+    } else if (!isIndoorSynced() && getIndoorHistory().length > 0) {
+      // Kein DB-Eintrag und noch nie synchronisiert → Erstmigration: lokale Indoor-Historie hochladen.
+      // Nach einem Sync ist ein leerer Server-Stand gewollt (z. B. "Alles löschen" auf anderem Gerät) → nicht erneut hochladen.
       for (const day of getIndoorHistory()) {
         await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
       }
     }
+    markIndoorSynced();
     // Custom Foods synchronisieren
     const foodRows = await SupabaseSync.pullFoods();
     if (foodRows?.length) {
@@ -2611,6 +2613,22 @@ function calcIndoor() {
 // ── Indoor-Rad: Speichern & Historie ────────────────────────────
 function getIndoorHistory() {
   try { return JSON.parse(localStorage.getItem(INDOOR_HISTORY_KEY) || '[]'); } catch(e) { return []; }
+}
+
+// Vergleichbare Darstellung einer Indoor-Liste (sortiert, Schlüssel alphabetisch),
+// damit inhaltliche Änderungen (z. B. Bearbeiten) erkannt werden.
+function indoorCanon(list) {
+  return JSON.stringify([...list].sort((a, b) => b.ts - a.ts).map(d =>
+    Object.keys(d).sort().reduce((o, k) => (o[k] = d[k], o), {})));
+}
+
+// Merkt sich, dass dieses Gerät schon einmal mit dem Server abgeglichen hat
+const INDOOR_SYNCED_KEY = 'purin_indoor_synced';
+function isIndoorSynced() {
+  try { return localStorage.getItem(INDOOR_SYNCED_KEY) === '1'; } catch(e) { return false; }
+}
+function markIndoorSynced() {
+  try { localStorage.setItem(INDOOR_SYNCED_KEY, '1'); } catch(e) {}
 }
 
 function saveIndoorRide() {
