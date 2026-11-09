@@ -18,20 +18,22 @@ async function fillFoodForm(page, values) {
 }
 
 test.describe('Supabase – lebensmittel', () => {
-  test('saveNewFood: neuer Eintrag ohne DELETE, POST mit Feldern', async ({ page }) => {
+  test('saveNewFood: neues Lebensmittel ohne Treffer: PATCH, dann POST mit Feldern, kein DELETE', async ({ page }) => {
     const requests = await setupSupabase(page);
     await fillFoodForm(page, { name: 'Testfood', purin: 12, kcal: 40, protein: 2, carbs: 3, fat: 1, fiber: 0.5 });
 
     await page.evaluate(() => { _editFoodIdx = null; saveNewFood(); });
 
-    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(1);
-    const [post] = writesTo(requests, 'lebensmittel');
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(2);
+    const [patch, post] = writesTo(requests, 'lebensmittel');
+    expect(patch.method).toBe('PATCH');
+    expect(patch.query).toBe('?user_id=eq.mario&name=eq.Testfood');
     expect(post.method).toBe('POST');
     expect(post.body).toMatchObject({ user_id: 'mario', name: 'Testfood', purin: 12, kcal: 40, protein: 2, carbs: 3, fat: 1, fiber: 0.5 });
   });
 
-  test('saveNewFood beim Bearbeiten: DELETE über den alten Namen, dann POST mit neuem Namen', async ({ page }) => {
-    const requests = await setupSupabase(page);
+  test('saveNewFood beim Bearbeiten: ein PATCH über den alten Namen, kein DELETE, kein POST', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'PATCH:lebensmittel': [{ name: 'Neu' }] });
     await page.evaluate((food) => {
       customFoods = [food];
       mergeCustomFoods();
@@ -41,11 +43,29 @@ test.describe('Supabase – lebensmittel', () => {
 
     await page.evaluate(() => saveNewFood());
 
-    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(2);
-    const [del, post] = writesTo(requests, 'lebensmittel');
-    expect(del.method).toBe('DELETE');
-    expect(del.query).toBe('?user_id=eq.mario&name=eq.Alt');
-    expect(post.body.name).toBe('Neu');
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(1);
+    await page.waitForTimeout(300);
+    const [patch] = writesTo(requests, 'lebensmittel');
+    expect(patch.method).toBe('PATCH');
+    expect(patch.query).toBe('?user_id=eq.mario&name=eq.Alt');
+    expect(patch.body.name).toBe('Neu');
+    expect(writesTo(requests, 'lebensmittel').map((r) => r.method)).toEqual(['PATCH']);
+  });
+
+  test('saveNewFood beim Bearbeiten: schlägt das PATCH fehl, wird nichts gelöscht und nichts neu angelegt', async ({ page }) => {
+    const requests = await setupSupabase(page, { 'FAIL:PATCH:lebensmittel': true });
+    await page.evaluate((food) => {
+      customFoods = [food];
+      mergeCustomFoods();
+      _editFoodIdx = 0;
+    }, FOOD);
+    await fillFoodForm(page, { name: 'Neu', purin: 5, kcal: 5, protein: 5, carbs: 5, fat: 5, fiber: 5 });
+
+    await page.evaluate(() => saveNewFood());
+
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(1);
+    await page.waitForTimeout(300);
+    expect(writesTo(requests, 'lebensmittel').map((r) => r.method)).toEqual(['PATCH']);
   });
 
   test('deleteCustomFood: DELETE über user_id und name', async ({ page }) => {
@@ -135,9 +155,9 @@ test.describe('Supabase – lebensmittel', () => {
       liveRefresh();
     }, FOOD);
 
-    // Erstmigration läuft über saveFood (nur POST), nicht über replaceFoods
-    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(1);
-    const [post] = writesTo(requests, 'lebensmittel');
+    // Erstmigration läuft über saveFood: PATCH ohne Treffer, dann POST
+    await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(2);
+    const [, post] = writesTo(requests, 'lebensmittel');
     expect(post.method).toBe('POST');
     expect(post.body).toMatchObject({ user_id: 'mario', name: 'Alt' });
   });

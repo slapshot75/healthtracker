@@ -56,10 +56,11 @@ test.describe('Supabase – purin_history Schreiboperationen', () => {
       saveDay();
     });
 
-    await expect.poll(() => writesTo(requests, 'purin_history').length).toBe(2);
-    await page.waitForTimeout(300);
+    // Der fehlgeschlagene Vorgang bleibt in der Warteschlange und wird bei jedem
+    // weiteren Schreibvorgang erneut versucht: nur PATCH/POST, nie DELETE.
+    await expect.poll(() => writesTo(requests, 'purin_history').length).toBeGreaterThanOrEqual(2);
     const methods = writesTo(requests, 'purin_history').map((r) => r.method);
-    expect(methods).toEqual(['PATCH', 'POST']);
+    expect(methods.every((m) => m === 'PATCH' || m === 'POST')).toBe(true);
     expect(methods).not.toContain('DELETE');
   });
 

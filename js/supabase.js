@@ -129,6 +129,66 @@ const SupabaseSync = (() => {
 
   const userFilter = () => `user_id=eq.${encodeURIComponent(USER_ID)}`;
 
+  // ── Warteschlange (Outbox) ────────────────────────────────────
+  // Jeder Schreibvorgang wird vor dem Senden in die Warteschlange gelegt und erst
+  // entfernt, wenn er erfolgreich war. Schlägt er fehl, bleibt er erhalten und wird
+  // beim nächsten Abgleich in Reihenfolge nachgeholt. Solange für eine Tabelle
+  // Einträge ausstehen, darf der Serverstand dieser Tabelle nicht übernommen werden
+  // (siehe hasPending in js/app.js).
+  const OUTBOX_KEY = 'sb_outbox';
+  // Vorgänge, die die ganze Tabelle setzen: ersetzen alle früheren Vorgänge der Tabelle
+  const TABLE_WIDE = new Set(['clearDays', 'clearWalks', 'clearIndoor', 'replaceFoods', 'pushToday']);
+
+  function loadOutbox() {
+    try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (e) { return []; }
+  }
+  // Ohne Ausnahme-Fang: kann der Speicher nicht geschrieben werden, schlägt der Vorgang laut fehl.
+  function saveOutbox(q) {
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(q));
+  }
+  function newId() {
+    return Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function enqueue(entry) {
+    const q = loadOutbox().filter((e) => {
+      if (e.table !== entry.table) return true;
+      if (TABLE_WIDE.has(entry.type)) return false;  // ersetzt alle früheren Vorgänge dieser Tabelle
+      return e.key !== entry.key;                    // gleiche Zeile: letzter Stand gewinnt
+    });
+    q.push(entry);
+    saveOutbox(q);
+  }
+
+  async function doFlush() {
+    for (;;) {
+      const q = loadOutbox();
+      if (q.length === 0) return;
+      const head = q[0];
+      // Wirft bei Fehler: der Eintrag bleibt in der Warteschlange
+      await ACTIONS[head.type](...head.args);
+      saveOutbox(loadOutbox().filter((e) => e.id !== head.id));
+    }
+  }
+
+  // Serialisiert alle Abgleiche, damit nie zwei Läufe gleichzeitig senden
+  let chain = Promise.resolve();
+  function flushOutbox() {
+    const run = chain.then(doFlush);
+    chain = run.catch(() => {});
+    return run;
+  }
+
+  function hasPending(table) {
+    return loadOutbox().some((e) => e.table === table);
+  }
+
+  // Jeder Schreibvorgang geht durch die Warteschlange: einreihen, dann in Reihenfolge senden
+  async function write(type, table, key, args) {
+    enqueue({ id: newId(), type, table, key, args });
+    await flushOutbox();
+  }
+
   // ── Gemeinsame Muster für Tabellen mit UNIQUE auf ts ─────────
   // Vorhandenen Eintrag mit gleichem ts aktualisieren; nur wenn keine Zeile
   // getroffen wurde, neu einfügen. Nie vorher löschen: scheitert der INSERT,
@@ -152,18 +212,14 @@ const SupabaseSync = (() => {
   }
 
   // ── purin_history ─────────────────────────────────────────────
-  function saveDay({ ts, date, items, totals }) {
-    return replaceByTs('purin_history', { ts, date, items, totals });
-  }
-  const deleteDay = (ts) => deleteByTs('purin_history', ts);
-  const clearDays = () => clearTable('purin_history');
+  const saveDay = ({ ts, date, items, totals }) => write('saveDay', 'purin_history', `ts:${ts}`, [{ ts, date, items, totals }]);
+  const deleteDay = (ts) => write('deleteDay', 'purin_history', `ts:${ts}`, [ts]);
+  const clearDays = () => write('clearDays', 'purin_history', null, []);
 
   // ── walk_history ──────────────────────────────────────────────
-  function saveWalk({ ts, date, data }) {
-    return replaceByTs('walk_history', { ts, date, data });
-  }
-  const deleteWalk = (ts) => deleteByTs('walk_history', ts);
-  const clearWalks = () => clearTable('walk_history');
+  const saveWalk = ({ ts, date, data }) => write('saveWalk', 'walk_history', `ts:${ts}`, [{ ts, date, data }]);
+  const deleteWalk = (ts) => write('deleteWalk', 'walk_history', `ts:${ts}`, [ts]);
+  const clearWalks = () => write('clearWalks', 'walk_history', null, []);
   function pullWalks() {
     return request('GET', 'walk_history', { query: `?${userFilter()}&order=ts.desc&limit=200` });
   }
@@ -187,13 +243,23 @@ const SupabaseSync = (() => {
     return request('GET', 'lebensmittel', { query: `?${userFilter()}&order=id.asc` });
   }
 
-  // oldName gesetzt = Eintrag wurde umbenannt oder geändert: alten Namen zuerst entfernen.
-  async function saveFood(food, oldName = null) {
-    if (oldName) await request('DELETE', 'lebensmittel', { query: `?${userFilter()}&name=eq.${encodeURIComponent(oldName)}` });
-    await request('POST', 'lebensmittel', { body: { user_id: USER_ID, ...foodRow(food) } });
+  // Speichert ein eigenes Lebensmittel. Der bestehende Datensatz wird mit einem einzigen
+  // PATCH geändert (auch bei Umbenennung: oldName sucht den Datensatz, der neue Name wird gesetzt).
+  // Nur wenn kein Datensatz getroffen wurde, folgt ein POST. Nie vorher löschen.
+  async function saveFoodNow(food, oldName = null) {
+    const row = { user_id: USER_ID, ...foodRow(food) };
+    const match = oldName || food.name;
+    const updated = await request('PATCH', 'lebensmittel', {
+      query: `?${userFilter()}&name=eq.${encodeURIComponent(match)}`,
+      body: row,
+      prefer: 'return=representation',
+    });
+    if (!(Array.isArray(updated) && updated.length > 0)) {
+      await request('POST', 'lebensmittel', { body: row });
+    }
   }
 
-  function deleteFood(name) {
+  function deleteFoodNow(name) {
     return request('DELETE', 'lebensmittel', { query: `?${userFilter()}&name=eq.${encodeURIComponent(name)}` });
   }
 
@@ -201,8 +267,7 @@ const SupabaseSync = (() => {
   // 1. jeder Eintrag wird per PATCH über den Namen aktualisiert, ohne Treffer per POST angelegt
   // 2. erst wenn alle Schreibvorgänge erfolgreich waren, werden Einträge entfernt,
   //    die nicht mehr in der Liste stehen
-  // Scheitert ein Schritt, bleiben bisherige Einträge erhalten.
-  async function replaceFoods(foods) {
+  async function replaceFoodsNow(foods) {
     for (const f of foods) {
       const row = { user_id: USER_ID, ...foodRow(f) };
       const updated = await request('PATCH', 'lebensmittel', {
@@ -224,9 +289,13 @@ const SupabaseSync = (() => {
     }
   }
 
+  const saveFood = (food, oldName = null) => write('saveFood', 'lebensmittel', `name:${food.name}`, [food, oldName]);
+  const deleteFood = (name) => write('deleteFood', 'lebensmittel', `name:${name}`, [name]);
+  const replaceFoods = (foods) => write('replaceFoods', 'lebensmittel', null, [foods]);
+
   // ── purin_today ───────────────────────────────────────────────
   // user_id ist UNIQUE: vorhandene Zeile aktualisieren, nur ohne Treffer neu einfügen.
-  async function pushToday({ ts, items, settings }) {
+  async function pushTodayNow({ ts, items, settings }) {
     const row = { user_id: USER_ID, ts, items, settings };
     const updated = await request('PATCH', 'purin_today', {
       query: `?${userFilter()}`,
@@ -237,6 +306,7 @@ const SupabaseSync = (() => {
       await request('POST', 'purin_today', { body: row });
     }
   }
+  const pushToday = (p) => write('pushToday', 'purin_today', null, [{ ts: p.ts, items: p.items, settings: p.settings }]);
 
   // Liefert ein Array mit höchstens einer Zeile (leeres Array, wenn nichts vorliegt).
   function pullToday() {
@@ -244,17 +314,33 @@ const SupabaseSync = (() => {
   }
 
   // ── indoor_history ────────────────────────────────────────────
-  function saveIndoor({ ts, date, data }) {
-    return replaceByTs('indoor_history', { ts, date, data });
-  }
-  const deleteIndoor = (ts) => deleteByTs('indoor_history', ts);
-  const clearIndoor = () => clearTable('indoor_history');
+  const saveIndoor = ({ ts, date, data }) => write('saveIndoor', 'indoor_history', `ts:${ts}`, [{ ts, date, data }]);
+  const deleteIndoor = (ts) => write('deleteIndoor', 'indoor_history', `ts:${ts}`, [ts]);
+  const clearIndoor = () => write('clearIndoor', 'indoor_history', null, []);
   function pullIndoor() {
     return request('GET', 'indoor_history', { query: `?${userFilter()}&order=ts.desc&limit=200` });
   }
 
+  // Ausführung je Vorgangstyp (ohne Warteschlange; wird nur aus doFlush aufgerufen)
+  const ACTIONS = {
+    saveDay:      ({ ts, date, items, totals }) => replaceByTs('purin_history', { ts, date, items, totals }),
+    deleteDay:    (ts) => deleteByTs('purin_history', ts),
+    clearDays:    () => clearTable('purin_history'),
+    saveWalk:     ({ ts, date, data }) => replaceByTs('walk_history', { ts, date, data }),
+    deleteWalk:   (ts) => deleteByTs('walk_history', ts),
+    clearWalks:   () => clearTable('walk_history'),
+    saveIndoor:   ({ ts, date, data }) => replaceByTs('indoor_history', { ts, date, data }),
+    deleteIndoor: (ts) => deleteByTs('indoor_history', ts),
+    clearIndoor:  () => clearTable('indoor_history'),
+    saveFood:     (food, oldName) => saveFoodNow(food, oldName),
+    deleteFood:   (name) => deleteFoodNow(name),
+    replaceFoods: (foods) => replaceFoodsNow(foods),
+    pushToday:    (p) => pushTodayNow(p),
+  };
+
   return {
     USER_ID, isConfigured, isLoggedIn, lastEmail, signIn, signOut,
+    flushOutbox, hasPending,
     saveDay, deleteDay, clearDays,
     saveWalk, deleteWalk, clearWalks, pullWalks,
     pullDays,

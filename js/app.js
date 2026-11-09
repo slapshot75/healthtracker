@@ -1267,6 +1267,12 @@ function getTodayStr() {
   return new Date().toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
 }
 
+// Liest ein gespeichertes Datum im Format TT.MM.JJJJ (getTodayStr); null wenn ungültig
+function parseLocalDateStr(s) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s || '');
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+}
+
 function checkMidnightReset() {
   const lastDate  = localStorage.getItem(LAST_DATE_KEY);
   const itemsDate = localStorage.getItem(ITEMS_DATE_KEY);
@@ -1281,19 +1287,23 @@ function checkMidnightReset() {
   );
 
   if (needsReset) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayDate = yesterday.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+    // Die Items gehören zu dem Tag, an dem sie zuletzt geschrieben wurden (itemsDate),
+    // nicht pauschal zu "gestern". Ohne itemsDate: lastDate, sonst gestern.
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() - 1);
+    const origin = parseLocalDateStr(itemsDate) || parseLocalDateStr(lastDate) || fallback;
+    const originDate = origin.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
 
     const tot = calcTotals(trackerItems);
     const history = getHistory();
-    const exists  = history.some(d => d.date === yesterdayDate);
+    const exists  = history.some(d => d.date === originDate);
     if (!exists) {
-      const yTs = getDayTs(yesterday);
-      history.unshift({ ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot });
+      const oTs = getDayTs(origin);
+      history.unshift({ ts: oTs, date: originDate, items: [...trackerItems], totals: tot });
+      history.sort((a, b) => b.ts - a.ts);
       if (history.length > 90) history.splice(90);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
-      dbAutoSave(() => SupabaseSync.saveDay({ ts: yTs, date: yesterdayDate, items: [...trackerItems], totals: tot }));
+      dbAutoSave(() => SupabaseSync.saveDay({ ts: oTs, date: originDate, items: [...trackerItems], totals: tot }));
     }
 
     trackerItems = [];
@@ -2257,6 +2267,13 @@ async function syncDownload() {
     return;
   }
   if (!SupabaseSync.isLoggedIn()) { showLogin(); return; }
+  try { await SupabaseSync.flushOutbox(); }
+  catch (e) {
+    // Download würde ungesendete lokale Änderungen überschreiben → abbrechen
+    setSyncStatus('error', 'Ausstehend');
+    showToast('⚠ Lokale Änderungen noch nicht gesendet – Download abgebrochen', 4000);
+    return;
+  }
   setSyncStatus('busy', 'Wird geladen…');
   try {
     // Fetch purin history
@@ -2360,143 +2377,156 @@ async function liveRefresh() {
   if (!userId) return;
   _liveRefreshRunning = true;
   try {
-    // Heutigen Tagesverbrauch holen
-    const todayRows = await SupabaseSync.pullToday();
-    if (todayRows?.length) {
-      const row = todayRows[0];
-      // Nur übernehmen wenn DB-Timestamp neuer als letzter eigener Write dieses Tabs
-      if (row.ts > _lastSavedTs) {
-        trackerItems = row.items || [];
-        _lastSavedTs = row.ts;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
-        // ITEMS_DATE_KEY setzen für Midnight-Reset
-        const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
-        const dateKey = row.ts >= todayMidnight.getTime()
-          ? getTodayStr()
-          : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
-        try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
-        // Purin-Limit nur übernehmen wenn remote-Limit-Timestamp neuer als lokaler
-        const remoteLimit   = row.settings?.purin_limit;
-        const remoteLimitTs = row.settings?.purin_limit_ts || 0;
-        if (remoteLimit && remoteLimitTs > _limitSettings.ts) {
-          PURIN_LIMIT = remoteLimit;
-          _limitSettings = { limit: remoteLimit, ts: remoteLimitTs };
-          localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings));
-          const inp = document.getElementById('purin-limit-input');
-          if (inp) inp.value = remoteLimit;
+    // Ausstehende eigene Schreibvorgänge zuerst nachholen (Warteschlange in supabase.js)
+    try { await SupabaseSync.flushOutbox(); } catch(e) { console.warn('Outbox:', e); }
+    if (!SupabaseSync.hasPending('purin_today')) {
+      // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
+      // Heutigen Tagesverbrauch holen
+      const todayRows = await SupabaseSync.pullToday();
+      if (todayRows?.length) {
+        const row = todayRows[0];
+        // Nur übernehmen wenn DB-Timestamp neuer als letzter eigener Write dieses Tabs
+        if (row.ts > _lastSavedTs) {
+          trackerItems = row.items || [];
+          _lastSavedTs = row.ts;
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
+          // ITEMS_DATE_KEY setzen für Midnight-Reset
+          const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+          const dateKey = row.ts >= todayMidnight.getTime()
+            ? getTodayStr()
+            : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+          try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
+          // Purin-Limit nur übernehmen wenn remote-Limit-Timestamp neuer als lokaler
+          const remoteLimit   = row.settings?.purin_limit;
+          const remoteLimitTs = row.settings?.purin_limit_ts || 0;
+          if (remoteLimit && remoteLimitTs > _limitSettings.ts) {
+            PURIN_LIMIT = remoteLimit;
+            _limitSettings = { limit: remoteLimit, ts: remoteLimitTs };
+            localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings));
+            const inp = document.getElementById('purin-limit-input');
+            if (inp) inp.value = remoteLimit;
+          }
+          renderTracker();
         }
-        renderTracker();
-      }
-    } else if (todayRows !== null && trackerItems.length > 0) {
-      // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
-      const ts = Date.now();
-      await SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
-      _lastSavedTs = ts;
-    }
-    // Purin-Historie holen
-    const purinRows = await SupabaseSync.pullDays();
-    if (!Array.isArray(purinRows)) throw new Error('Unerwartete Antwort (purin_history)');
-    if (purinRows.length) {
-      const remoteTs = JSON.stringify(purinRows.map(r => r.ts));
-      const localTs  = JSON.stringify(getHistory().map(d => d.ts));
-      if (remoteTs !== localTs) {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(
-          purinRows.map(r => ({ ts: r.ts, date: r.date, items: r.items, totals: r.totals }))));
-        renderHistory();
-        if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
-      }
-    } else if (isSynced('purin')) {
-      // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
-      if (getHistory().length > 0) {
-        localStorage.setItem(HISTORY_KEY, '[]');
-        renderHistory();
-        if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
-      }
-    } else if (getHistory().length > 0) {
-      // Erstmigration (nie synchronisiert, Server leer): lokale Historie hochladen
-      for (const day of getHistory()) {
-        await SupabaseSync.saveDay({ ts: day.ts, date: day.date, items: day.items, totals: day.totals || calcTotals(day.items) });
+      } else if (todayRows !== null && trackerItems.length > 0) {
+        // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
+        const ts = Date.now();
+        await SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
+        _lastSavedTs = ts;
       }
     }
-    markSynced('purin');
-    // Walk-Historie holen
-    const walkRows = await SupabaseSync.pullWalks();
-    if (!Array.isArray(walkRows)) throw new Error('Unerwartete Antwort (walk_history)');
-    if (walkRows.length) {
-      const remoteTs = JSON.stringify(walkRows.map(r => r.ts));
-      const localTs  = JSON.stringify(getWalkHistory().map(d => d.ts));
-      if (remoteTs !== localTs) {
-        localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(
-          walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }))));
-        renderWalkHistory();
-        if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+    if (!SupabaseSync.hasPending('purin_history')) {
+      // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
+      // Purin-Historie holen
+      const purinRows = await SupabaseSync.pullDays();
+      if (!Array.isArray(purinRows)) throw new Error('Unerwartete Antwort (purin_history)');
+      if (purinRows.length) {
+        const remoteList = purinRows.map(r => ({ ts: r.ts, date: r.date, items: r.items, totals: r.totals }));
+        const localList  = getHistory().map(d => ({ ts: d.ts, date: d.date, items: d.items, totals: d.totals || calcTotals(d.items) }));
+        if (listCanon(remoteList) !== listCanon(localList)) {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(remoteList));
+          renderHistory();
+          if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+        }
+      } else if (isSynced('purin')) {
+        // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
+        if (getHistory().length > 0) {
+          localStorage.setItem(HISTORY_KEY, '[]');
+          renderHistory();
+          if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
+        }
+      } else if (getHistory().length > 0) {
+        // Erstmigration (nie synchronisiert, Server leer): lokale Historie hochladen
+        for (const day of getHistory()) {
+          await SupabaseSync.saveDay({ ts: day.ts, date: day.date, items: day.items, totals: day.totals || calcTotals(day.items) });
+        }
       }
-    } else if (isSynced('walk')) {
-      // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
-      if (getWalkHistory().length > 0) {
-        localStorage.setItem(WALK_HISTORY_KEY, '[]');
-        renderWalkHistory();
-        if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
-      }
-    } else if (getWalkHistory().length > 0) {
-      // Erstmigration (nie synchronisiert, Server leer): lokale Walk-Historie hochladen
-      for (const day of getWalkHistory()) {
-        await SupabaseSync.saveWalk({ ts: day.ts, date: day.date, data: day });
-      }
+      markSynced('purin');
     }
-    markSynced('walk');
-    // Indoor-Historie holen
-    const indoorRows = await SupabaseSync.pullIndoor();
-    if (!Array.isArray(indoorRows)) throw new Error('Unerwartete Antwort (indoor_history)');
-    if (indoorRows.length) {
-      const remoteList = indoorRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
-      if (indoorCanon(remoteList) !== indoorCanon(getIndoorHistory())) {
-        localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(remoteList));
-        renderIndoorHistory();
-        if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
+    if (!SupabaseSync.hasPending('walk_history')) {
+      // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
+      // Walk-Historie holen
+      const walkRows = await SupabaseSync.pullWalks();
+      if (!Array.isArray(walkRows)) throw new Error('Unerwartete Antwort (walk_history)');
+      if (walkRows.length) {
+        const remoteList = walkRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
+        if (listCanon(remoteList) !== listCanon(getWalkHistory())) {
+          localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(remoteList));
+          renderWalkHistory();
+          if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+        }
+      } else if (isSynced('walk')) {
+        // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
+        if (getWalkHistory().length > 0) {
+          localStorage.setItem(WALK_HISTORY_KEY, '[]');
+          renderWalkHistory();
+          if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+        }
+      } else if (getWalkHistory().length > 0) {
+        // Erstmigration (nie synchronisiert, Server leer): lokale Walk-Historie hochladen
+        for (const day of getWalkHistory()) {
+          await SupabaseSync.saveWalk({ ts: day.ts, date: day.date, data: day });
+        }
       }
-    } else if (isSynced('indoor')) {
-      // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
-      if (getIndoorHistory().length > 0) {
-        localStorage.setItem(INDOOR_HISTORY_KEY, '[]');
-        renderIndoorHistory();
-        if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
-      }
-    } else if (getIndoorHistory().length > 0) {
-      // Erstmigration (nie synchronisiert, Server leer): lokale Indoor-Historie hochladen
-      for (const day of getIndoorHistory()) {
-        await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
-      }
+      markSynced('walk');
     }
-    markSynced('indoor');
-    // Custom Foods synchronisieren
-    const foodRows = await SupabaseSync.pullFoods();
-    if (!Array.isArray(foodRows)) throw new Error('Unerwartete Antwort (lebensmittel)');
-    if (foodRows.length) {
-      // Remote hat Daten → lokal übernehmen wenn unterschiedlich
-      const remoteNames = JSON.stringify(foodRows.map(r => r.name).sort());
-      const localNames  = JSON.stringify(customFoods.map(f => f.name).sort());
-      if (remoteNames !== localNames) {
-        customFoods = foodRows.map(r => ({ name: r.name, category: r.category, purin: +r.purin, protein: +r.protein, kcal: +r.kcal, carbs: +r.carbs, fiber: +r.fiber, fat: +r.fat }));
-        localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
-        mergeCustomFoods();
-        render();
+    if (!SupabaseSync.hasPending('indoor_history')) {
+      // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
+      // Indoor-Historie holen
+      const indoorRows = await SupabaseSync.pullIndoor();
+      if (!Array.isArray(indoorRows)) throw new Error('Unerwartete Antwort (indoor_history)');
+      if (indoorRows.length) {
+        const remoteList = indoorRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }));
+        if (listCanon(remoteList) !== listCanon(getIndoorHistory())) {
+          localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(remoteList));
+          renderIndoorHistory();
+          if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
+        }
+      } else if (isSynced('indoor')) {
+        // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
+        if (getIndoorHistory().length > 0) {
+          localStorage.setItem(INDOOR_HISTORY_KEY, '[]');
+          renderIndoorHistory();
+          if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
+        }
+      } else if (getIndoorHistory().length > 0) {
+        // Erstmigration (nie synchronisiert, Server leer): lokale Indoor-Historie hochladen
+        for (const day of getIndoorHistory()) {
+          await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
+        }
       }
-    } else if (isSynced('foods')) {
-      // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
-      if (customFoods.length > 0) {
-        customFoods = [];
-        localStorage.setItem(CUSTOM_FOODS_KEY, '[]');
-        mergeCustomFoods();
-        render();
-      }
-    } else if (customFoods.length > 0) {
-      // Erstmigration (nie synchronisiert, Server leer): eigene Lebensmittel hochladen
-      for (const f of customFoods) {
-        await SupabaseSync.saveFood(f);
-      }
+      markSynced('indoor');
     }
-    markSynced('foods');
+    if (!SupabaseSync.hasPending('lebensmittel')) {
+      // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
+      // Custom Foods synchronisieren
+      const foodRows = await SupabaseSync.pullFoods();
+      if (!Array.isArray(foodRows)) throw new Error('Unerwartete Antwort (lebensmittel)');
+      if (foodRows.length) {
+        // Remote hat Daten → lokal übernehmen wenn unterschiedlich
+        const remoteFoods = foodRows.map(pickFood);
+        if (foodCanon(remoteFoods) !== foodCanon(customFoods)) {
+          customFoods = remoteFoods;
+          localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods));
+          mergeCustomFoods();
+          render();
+        }
+      } else if (isSynced('foods')) {
+        // Server leer, Gerät kannte den Server schon: auf anderem Gerät gelöscht → lokal leeren
+        if (customFoods.length > 0) {
+          customFoods = [];
+          localStorage.setItem(CUSTOM_FOODS_KEY, '[]');
+          mergeCustomFoods();
+          render();
+        }
+      } else if (customFoods.length > 0) {
+        // Erstmigration (nie synchronisiert, Server leer): eigene Lebensmittel hochladen
+        for (const f of customFoods) {
+          await SupabaseSync.saveFood(f);
+        }
+      }
+      markSynced('foods');
+    }
     setSyncStatus('ok', `Sync ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`);
   } catch(e) {
     console.warn('liveRefresh:', e);
@@ -2671,9 +2701,24 @@ function getIndoorHistory() {
 
 // Vergleichbare Darstellung einer Indoor-Liste (sortiert, Schlüssel alphabetisch),
 // damit inhaltliche Änderungen (z. B. Bearbeiten) erkannt werden.
-function indoorCanon(list) {
-  return JSON.stringify([...list].sort((a, b) => b.ts - a.ts).map(d =>
-    Object.keys(d).sort().reduce((o, k) => (o[k] = d[k], o), {})));
+// Stabiler Vergleichsstring: Schlüssel rekursiv sortiert, Einträge nach ts absteigend.
+// Vergleicht den ganzen Inhalt (Mengen, Trainingswerte, Nährwerte), nicht nur Schlüssel.
+function stableStringify(v) {
+  if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v);
+}
+function listCanon(list) {
+  return stableStringify([...list].sort((a, b) => b.ts - a.ts));
+}
+function foodCanon(list) {
+  return stableStringify(list.map(pickFood).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)));
+}
+// Eigenes Lebensmittel in die gespeicherte Form bringen (Zahlen, feste Felder)
+function pickFood(f) {
+  return { name: f.name, category: f.category, purin: +f.purin, protein: +f.protein, kcal: +f.kcal, carbs: +f.carbs, fiber: +f.fiber, fat: +f.fat };
 }
 
 // Pro Datenart merken, dass dieses Gerät schon einmal mit dem Server abgeglichen hat.

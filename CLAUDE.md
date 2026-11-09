@@ -64,6 +64,7 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 
 - RLS ist **aktiv** (Migration `supabase/2026-11-09-auth-rls.sql`): Zugriff nur für die Rolle `authenticated`, also nur mit Login. Der Anon-Key allein hat keinen Zugriff. `supabase/supabase_setup.sql` enthält noch den alten Stand ohne RLS und muss für neue Projekte durch die Migration ergänzt werden.
 - Schreib-Strategie für `ts`-Tabellen: **PATCH, dann INSERT nur wenn keine Zeile getroffen wurde** (`replaceByTs`). Kein DELETE vorab, damit ein fehlgeschlagener INSERT keinen Eintrag entfernt. `pushToday` (purin_today) folgt demselben Muster. `replaceFoods` (lebensmittel) aktualisiert zuerst per PATCH über den Namen, löscht veraltete Einträge erst am Ende per `not.in`.
+- **Warteschlange (Outbox):** Jeder Schreibvorgang in `js/supabase.js` wird vor dem Senden in `localStorage` (`sb_outbox`) eingereiht und erst nach Erfolg entfernt. Fehlgeschlagene Vorgänge werden beim nächsten Schreibvorgang oder Abgleich in Reihenfolge erneut versucht. Solange für eine Tabelle Einträge ausstehen (`SupabaseSync.hasPending`), übernimmt `liveRefresh` deren Serverstand nicht, und `syncDownload` bricht ab, wenn die Warteschlange nicht leer wird. Ein dauerhaft abgelehnter Vorgang (z. B. 400) bleibt in der Warteschlange und blockiert die Tabelle.
 - `lebensmittel`: `user_id = '__base__'` für Basisdaten, eigene `user_id` für Custom Foods
 
 ---
