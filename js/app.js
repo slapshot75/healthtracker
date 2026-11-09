@@ -1746,7 +1746,7 @@ document.addEventListener('keydown', e => {
 
 // ── Seiten-Navigation ───────────────────────────────────────────
 function switchPage(name) {
-  ['purin','walk','indoor'].forEach(p => {
+  ['purin','walk','indoor','summary'].forEach(p => {
     document.getElementById('page-' + p)?.classList.remove('active');
     document.getElementById('pnav-' + p)?.classList.remove('active');
   });
@@ -1754,6 +1754,24 @@ function switchPage(name) {
   document.getElementById('pnav-' + name).classList.add('active');
   if (name === 'walk') calcWalk();
   if (name === 'indoor') calcIndoor();
+  if (name === 'summary') renderSummary();
+}
+
+// ── Gesamtverbrauch: Summe der Kalorien aus Gehrechner und Indoor-Rad ──
+function renderSummary() {
+  const fmt = n => Math.round(n).toLocaleString('de-DE');
+  const sumKcal = list => list.reduce((s, d) => s + (Number(d.kcal) || 0), 0);
+  const walk   = getWalkHistory();
+  const indoor = getIndoorHistory();
+  const walkKcal   = sumKcal(walk);
+  const indoorKcal = sumKcal(indoor);
+
+  document.getElementById('sum-kcal').textContent        = fmt(walkKcal + indoorKcal);
+  document.getElementById('sum-count').textContent       = String(walk.length + indoor.length);
+  document.getElementById('sum-walk-kcal').textContent   = fmt(walkKcal);
+  document.getElementById('sum-walk-count').textContent  = walk.length + ' Einheiten · kcal';
+  document.getElementById('sum-indoor-kcal').textContent = fmt(indoorKcal);
+  document.getElementById('sum-indoor-count').textContent = indoor.length + ' Einheiten · kcal';
 }
 
 // ── Gehrechner ──────────────────────────────────────────────────

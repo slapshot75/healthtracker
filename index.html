@@ -33,6 +33,7 @@
       <button class="page-nav-btn active" id="pnav-purin" onclick="switchPage('purin')">Lebensmittel & Purin</button>
       <button class="page-nav-btn" id="pnav-walk" onclick="switchPage('walk')">Gehrechner</button>
       <button class="page-nav-btn" id="pnav-indoor" onclick="switchPage('indoor')">Indoor-Rad</button>
+      <button class="page-nav-btn" id="pnav-summary" onclick="switchPage('summary')">Gesamtverbrauch</button>
     </div>
     <div class="data-btns" style="padding-bottom:4px;">
       <button id="theme-toggle" class="data-btn" onclick="toggleTheme()" style="padding:0 10px;" title="Design wechseln">Dunkel</button>
@@ -515,6 +516,34 @@
     </div>
 
   </div><!-- /page-indoor -->
+
+  <!-- Seite 4: Gesamtverbrauch (Summe aus Gehrechner und Indoor-Rad) -->
+  <div class="page-section" id="page-summary">
+
+    <div class="tab-box">
+      <div style="margin-bottom:1.25rem;">
+        <div class="history-title">Gesamtverbrauch</div>
+        <div class="history-sub">Summe der Kalorien aus allen gespeicherten Gehrechner- und Indoor-Einheiten</div>
+      </div>
+      <div class="walk-grid">
+        <div class="walk-card">
+          <div class="walk-card-title">Gesamt</div>
+          <div class="walk-results">
+            <div class="walk-result highlight"><div class="walk-result-label">Kalorienverbrauch</div><div class="walk-result-val" id="sum-kcal">—</div><div class="walk-result-unit">kcal gesamt</div></div>
+            <div class="walk-result"><div class="walk-result-label">Einheiten</div><div class="walk-result-val" id="sum-count">—</div><div class="walk-result-unit">gespeichert</div></div>
+          </div>
+        </div>
+        <div class="walk-card">
+          <div class="walk-card-title">Aufteilung</div>
+          <div class="walk-results">
+            <div class="walk-result"><div class="walk-result-label">Gehrechner</div><div class="walk-result-val" id="sum-walk-kcal">—</div><div class="walk-result-unit" id="sum-walk-count">kcal</div></div>
+            <div class="walk-result"><div class="walk-result-label">Indoor-Rad</div><div class="walk-result-val" id="sum-indoor-kcal">—</div><div class="walk-result-unit" id="sum-indoor-count">kcal</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-summary -->
 </div>
 
 <!-- Eigenes Lebensmittel hinzufügen Modal -->
