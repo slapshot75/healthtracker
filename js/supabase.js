@@ -114,6 +114,16 @@ const SupabaseSync = (() => {
     return request('GET', 'purin_today', { query: `?${userFilter()}&order=ts.desc&limit=1` });
   }
 
+  // ── indoor_history ────────────────────────────────────────────
+  function saveIndoor({ ts, date, data }) {
+    return replaceByTs('indoor_history', { ts, date, data });
+  }
+  const deleteIndoor = (ts) => deleteByTs('indoor_history', ts);
+  const clearIndoor = () => clearTable('indoor_history');
+  function pullIndoor() {
+    return request('GET', 'indoor_history', { query: `?${userFilter()}&order=ts.desc&limit=200` });
+  }
+
   return {
     USER_ID, isConfigured,
     saveDay, deleteDay, clearDays,
@@ -121,5 +131,6 @@ const SupabaseSync = (() => {
     pullDays,
     pullBaseFoods, pullFoods, saveFood, deleteFood, replaceFoods,
     pushToday, pullToday,
+    saveIndoor, deleteIndoor, clearIndoor, pullIndoor,
   };
 })();

@@ -1705,13 +1705,14 @@ document.addEventListener('keydown', e => {
 
 // ── Seiten-Navigation ───────────────────────────────────────────
 function switchPage(name) {
-  ['purin','walk'].forEach(p => {
+  ['purin','walk','indoor'].forEach(p => {
     document.getElementById('page-' + p)?.classList.remove('active');
     document.getElementById('pnav-' + p)?.classList.remove('active');
   });
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('pnav-' + name).classList.add('active');
   if (name === 'walk') calcWalk();
+  if (name === 'indoor') calcIndoor();
 }
 
 // ── Gehrechner ──────────────────────────────────────────────────
@@ -2159,6 +2160,7 @@ function renderWalkChart() {
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (!document.documentElement.hasAttribute('data-theme')) {
     if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+    if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
   }
 });
 
@@ -2208,6 +2210,10 @@ async function syncUpload() {
         ts: day.ts, date: day.date, data: day,
       });
     }
+    // Upsert into indoor_history
+    for (const day of getIndoorHistory()) {
+      await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
+    }
     // Upsert today
     if (today.length) {
       await SupabaseSync.pushToday({
@@ -2240,6 +2246,9 @@ async function syncDownload() {
 
     // Fetch walk history
     const walkRows = await SupabaseSync.pullWalks();
+
+    // Fetch indoor history
+    const indoorRows = await SupabaseSync.pullIndoor();
 
     // Fetch today
     const todayRows = await SupabaseSync.pullToday();
@@ -2278,6 +2287,13 @@ async function syncDownload() {
     if (mergedWalk.length > 200) mergedWalk.splice(200);
     localStorage.setItem(WALK_HISTORY_KEY, JSON.stringify(mergedWalk));
 
+    // Merge indoor history — server wins
+    const indoorMap = new Map(getIndoorHistory().map(d => [d.ts, d]));
+    (indoorRows || []).forEach(row => indoorMap.set(row.ts, row.data));
+    const mergedIndoor = Array.from(indoorMap.values()).sort((a, b) => b.ts - a.ts);
+    if (mergedIndoor.length > 200) mergedIndoor.splice(200);
+    localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(mergedIndoor));
+
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
       const todayMidnight = new Date();
@@ -2297,6 +2313,8 @@ async function syncDownload() {
 
     renderHistory();
     renderWalkHistory();
+    renderIndoorHistory();
+    renderIndoorChart();
     renderTracker();
     render();
     if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
@@ -2390,6 +2408,23 @@ async function liveRefresh() {
         await SupabaseSync.saveWalk({ ts: day.ts, date: day.date, data: day });
       }
     }
+    // Indoor-Historie holen
+    const indoorRows = await SupabaseSync.pullIndoor();
+    if (indoorRows?.length) {
+      const remoteTs = JSON.stringify(indoorRows.map(r => r.ts));
+      const localTs  = JSON.stringify(getIndoorHistory().map(d => d.ts));
+      if (remoteTs !== localTs) {
+        localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(
+          indoorRows.map(r => ({ ...r.data, ts: r.ts, date: r.date }))));
+        renderIndoorHistory();
+        if (document.getElementById('itab-chart')?.classList.contains('active')) renderIndoorChart();
+      }
+    } else if (indoorRows !== null && getIndoorHistory().length > 0) {
+      // Kein DB-Eintrag → Erstmigration: lokale Indoor-Historie hochladen
+      for (const day of getIndoorHistory()) {
+        await SupabaseSync.saveIndoor({ ts: day.ts, date: day.date, data: day });
+      }
+    }
     // Custom Foods synchronisieren
     const foodRows = await SupabaseSync.pullFoods();
     if (foodRows?.length) {
@@ -2463,3 +2498,427 @@ document.addEventListener('visibilitychange', () => {
 });
 // Alle 5 Sekunden im Hintergrund aktualisieren
 setInterval(liveRefresh, 5000);
+
+// ── Indoor-Rad: Rechner ─────────────────────────────────────────
+const INDOOR_HISTORY_KEY = 'purin_indoor_history';
+
+const INDOOR_METRIC_CONFIG = {
+  tss:   { label: 'TSS',                  color: '#378ADD', unit: '' },
+  if:    { label: 'IF',                   color: '#8B5CF6', unit: '' },
+  kcal:  { label: 'Kalorien (kcal)',      color: '#E24B4A', unit: 'kcal' },
+  watts: { label: 'Ø Leistung (W)',       color: '#EF9F27', unit: 'W' },
+  np:    { label: 'NP (W)',               color: '#0F6E56', unit: 'W' },
+  dist:  { label: 'Distanz (km)',         color: '#639922', unit: 'km' },
+  elev:  { label: 'Höhenmeter',           color: '#1D9E75', unit: 'm' },
+  dur:   { label: 'Dauer (min)',          color: '#D85A30', unit: 'min' },
+  cad:   { label: 'Trittfrequenz (U/min)', color: '#BA7517', unit: '' },
+};
+
+let indoorChartInstance = null;
+let editIndoorTs = null;
+let editIndoorIsNew = false;
+
+function switchIndoorTab(name) {
+  ['calc','history','chart'].forEach(t => {
+    document.getElementById('itab-' + t)?.classList.remove('active');
+    document.getElementById('itab-btn-' + t)?.classList.remove('active');
+  });
+  document.getElementById('itab-' + name).classList.add('active');
+  document.getElementById('itab-btn-' + name).classList.add('active');
+  if (name === 'chart') renderIndoorChart();
+}
+
+// Liest die Eingabefelder; p = 'i-' (Rechner) oder 'ei-' (Bearbeiten-Fenster)
+function readIndoorInputs(p) {
+  const num = id => parseFloat(document.getElementById(p + id).value);
+  const watts = num('watts') || 0;
+  const npIn  = num('np');
+  return {
+    dur:   num('duration'),           // min
+    dist:  num('dist') || 0,          // km
+    elev:  num('elev') || 0,          // m
+    cad:   num('cad') || 0,           // U/min
+    watts,                            // W Ø
+    np:    (isNaN(npIn) || npIn <= 0) ? watts : npIn, // W normalisiert
+    ftp:   num('ftp') || 0,           // W
+    eff:   num('eff') || 22,          // %
+  };
+}
+
+// Reine Berechnung, ohne DOM. Gibt null zurück, wenn Zeit oder FTP fehlen.
+function computeIndoor(v) {
+  if (!(v.dur > 0) || !(v.ftp > 0)) return null;
+  const durS  = v.dur * 60;
+  const ifVal = v.np / v.ftp;                                    // IF = NP / FTP
+  const tss   = Math.round((durS * v.np * ifVal) / (v.ftp * 36)); // TSS = s·NP·IF / (FTP·3600) · 100
+  const ifR   = Math.round(ifVal * 100) / 100;
+  const kj    = Math.round(v.watts * durS / 1000);               // mechanische Arbeit in kJ
+  const kcal  = Math.round(kj / (v.eff / 100) / 4.184);          // Wirkungsgrad-Korrektur, kJ → kcal
+  const speed = v.dist > 0 ? Math.round((v.dist / (v.dur / 60)) * 10) / 10 : 0;
+  return {
+    dur: v.dur, dist: v.dist, elev: Math.round(v.elev), cad: v.cad,
+    watts: v.watts, np: v.np, ftp: v.ftp, eff: v.eff,
+    tss, if: ifR, kj, kcal, speed,
+  };
+}
+
+function indoorSummaryHtml(r) {
+  const ifText  = r.if < 0.75 ? 'locker' : r.if < 0.85 ? 'moderat' : r.if < 1.05 ? 'an der Schwelle' : 'über der Schwelle';
+  const tssText = r.tss < 150 ? 'gering' : r.tss < 300 ? 'mittel' : r.tss < 450 ? 'hoch' : 'sehr hoch';
+  return `<strong>Zusammenfassung:</strong> ${r.dur} min mit Ø ${Math.round(r.watts)} W und NP ${Math.round(r.np)} W
+    (IF ${r.if.toFixed(2)}, ${ifText}). Das ergibt <strong>${r.tss} TSS</strong> (${tssText}) und
+    <strong>${r.kcal} kcal</strong> bei ${r.eff} % Wirkungsgrad.`;
+}
+
+// Slider → Zahlenfeld, danach neu berechnen
+function indoorSliderChanged(numId) {
+  document.getElementById(numId).value = document.getElementById(numId + '-range').value;
+  calcIndoor();
+}
+
+// Zahlenfeld → Slider (nur wenn ein gültiger Wert vorliegt)
+function syncIndoorSliders() {
+  ['i-duration','i-dist','i-elev','i-cad','i-watts','i-np','i-ftp','i-eff'].forEach(id => {
+    const num   = document.getElementById(id);
+    const range = document.getElementById(id + '-range');
+    if (!num || !range) return;
+    let v = num.value;
+    if (v === '' && id === 'i-np') v = document.getElementById('i-watts').value; // leer = Ø Leistung
+    if (v === '' || isNaN(parseFloat(v))) return;
+    range.value = v;
+  });
+}
+
+function calcIndoor() {
+  syncIndoorSliders();
+  const set = (id, v) => document.getElementById(id).textContent = v;
+  const r = computeIndoor(readIndoorInputs('i-'));
+  if (!r) {
+    ['ri-tss','ri-if','ri-kcal','ri-kj','ri-speed','ri-elev'].forEach(id => set(id, '—'));
+    document.getElementById('indoor-info').innerHTML = '<strong>Bitte</strong> Zeit und FTP (Schwellenleistung) eingeben.';
+    return null;
+  }
+  set('ri-tss',   r.tss.toLocaleString('de-DE'));
+  set('ri-if',    r.if.toLocaleString('de-DE', { minimumFractionDigits: 2 }));
+  set('ri-kcal',  r.kcal.toLocaleString('de-DE'));
+  set('ri-kj',    r.kj.toLocaleString('de-DE'));
+  set('ri-speed', r.speed.toLocaleString('de-DE', { minimumFractionDigits: 1 }));
+  set('ri-elev',  r.elev.toLocaleString('de-DE'));
+  document.getElementById('indoor-info').innerHTML = indoorSummaryHtml(r);
+  return r;
+}
+
+// ── Indoor-Rad: Speichern & Historie ────────────────────────────
+function getIndoorHistory() {
+  try { return JSON.parse(localStorage.getItem(INDOOR_HISTORY_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function saveIndoorRide() {
+  const result = calcIndoor();
+  if (!result) { showToast('⚠ Zeit und FTP eingeben', 3000); return; }
+  const history = getIndoorHistory();
+  const date = new Date().toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+  const entry = { ts: Date.now(), date, ...result };
+  history.unshift(entry);
+  if (history.length > 200) history.splice(200);
+  try {
+    localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(history));
+    renderIndoorHistory();
+    renderIndoorChart();
+    showToast('✓ Einheit gespeichert');
+    const btn = document.getElementById('btn-save-indoor');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Gespeichert';
+    setTimeout(() => btn.textContent = orig, 1500);
+  } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+  dbAutoSave(() => SupabaseSync.saveIndoor({ ts: entry.ts, date: entry.date, data: entry }));
+}
+
+function deleteIndoorRide(ts) {
+  const history = getIndoorHistory().filter(d => d.ts !== ts);
+  try { localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+  renderIndoorHistory();
+  renderIndoorChart();
+  dbAutoSave(() => SupabaseSync.deleteIndoor(ts));
+}
+
+async function clearIndoorHistory() {
+  if (!confirm('Gesamte Indoor-Historie löschen?')) return;
+  try { localStorage.removeItem(INDOOR_HISTORY_KEY); } catch(e) {}
+  renderIndoorHistory();
+  renderIndoorChart();
+
+  if (SupabaseSync.isConfigured()) {
+    try {
+      await SupabaseSync.clearIndoor();
+      showToast('✓ Indoor-Historie lokal + in DB gelöscht');
+    } catch(e) { showToast('⚠ DB-Löschen fehlgeschlagen: ' + e.message, 4000); }
+  }
+}
+
+function toggleIndoorRide(ts) {
+  document.getElementById('iday-' + ts)?.classList.toggle('open');
+}
+
+function renderIndoorHistory() {
+  const history = getIndoorHistory();
+  const container = document.getElementById('indoor-history-list');
+  if (!history.length) {
+    container.innerHTML = '<div class="walk-history-empty">Noch keine gespeicherten Einheiten.</div>';
+    return;
+  }
+  container.innerHTML = '<div class="walk-history-list">' + history.map(d => `
+    <div class="walk-history-day">
+      <div class="walk-history-hdr" onclick="toggleIndoorRide(${Number(d.ts)})">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
+          <div class="walk-history-date">${d.date}</div>
+          <div class="walk-history-pills">
+            <span class="walk-history-pill"><strong style="color:#378ADD">${d.tss}</strong> TSS</span>
+            <span class="walk-history-pill"><strong>${d.if.toFixed(2)}</strong> IF</span>
+            <span class="walk-history-pill"><strong>${d.kcal}</strong> kcal</span>
+            <span class="walk-history-pill"><strong>${Math.round(d.watts)}</strong> W Ø</span>
+            <span class="walk-history-pill">${d.dur} min · ${d.dist} km · ${d.elev} Hm</span>
+          </div>
+        </div>
+        <button class="walk-history-edit" onclick="event.stopPropagation();openEditIndoorModal(${Number(d.ts)})" title="Bearbeiten">✎</button>
+        <button class="walk-history-del" onclick="event.stopPropagation();deleteIndoorRide(${Number(d.ts)})">×</button>
+      </div>
+      <div class="walk-history-body" id="iday-${Number(d.ts)}">
+        NP ${Math.round(d.np)} W · FTP ${d.ftp} W · Trittfrequenz ${d.cad} U/min · Ø ${d.speed} km/h · Wirkungsgrad ${d.eff} % · ${d.kj} kJ
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+// ── Indoor-Rad: Bearbeiten ──────────────────────────────────────
+function setIndoorEditFields(values) {
+  document.getElementById('ei-duration').value = values.dur;
+  document.getElementById('ei-dist').value     = values.dist;
+  document.getElementById('ei-elev').value     = values.elev;
+  document.getElementById('ei-cad').value      = values.cad;
+  document.getElementById('ei-watts').value    = values.watts;
+  document.getElementById('ei-np').value       = values.np;
+  document.getElementById('ei-ftp').value      = values.ftp;
+  document.getElementById('ei-eff').value      = values.eff;
+}
+
+function openNewIndoorDayModal() {
+  editIndoorIsNew = true;
+  editIndoorTs    = null;
+  document.getElementById('eindoor-title').textContent = 'Vergangene Einheit hinzufügen';
+  document.getElementById('eindoor-date').style.display = 'none';
+  const picker = document.getElementById('eindoor-datepicker');
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  picker.value = yesterday.toISOString().slice(0, 10);
+  picker.style.display = '';
+  // Startwerte aus dem Rechner übernehmen
+  setIndoorEditFields({
+    dur:   document.getElementById('i-duration').value,
+    dist:  document.getElementById('i-dist').value,
+    elev:  document.getElementById('i-elev').value,
+    cad:   document.getElementById('i-cad').value,
+    watts: document.getElementById('i-watts').value,
+    np:    document.getElementById('i-np').value,
+    ftp:   document.getElementById('i-ftp').value,
+    eff:   document.getElementById('i-eff').value,
+  });
+  calcIndoorEdit();
+  document.getElementById('edit-indoor-modal').classList.add('open');
+}
+
+function openEditIndoorModal(ts) {
+  const day = getIndoorHistory().find(d => d.ts === ts);
+  if (!day) return;
+  editIndoorIsNew = false;
+  editIndoorTs    = ts;
+  document.getElementById('eindoor-title').textContent = 'Indoor-Eintrag bearbeiten';
+  document.getElementById('eindoor-date').textContent  = day.date;
+  document.getElementById('eindoor-date').style.display = '';
+  document.getElementById('eindoor-datepicker').style.display = 'none';
+  setIndoorEditFields(day);
+  calcIndoorEdit();
+  document.getElementById('edit-indoor-modal').classList.add('open');
+}
+
+function closeEditIndoorModal(e) {
+  if (e && e.target !== document.getElementById('edit-indoor-modal')) return;
+  document.getElementById('edit-indoor-modal').classList.remove('open');
+  editIndoorTs = null;
+  editIndoorIsNew = false;
+}
+
+function calcIndoorEdit() {
+  const box = document.getElementById('eindoor-results');
+  const r = computeIndoor(readIndoorInputs('ei-'));
+  if (!r) {
+    box.innerHTML = '<div class="edit-total" style="grid-column:1/-1;"><div class="edit-total-label">Hinweis</div><div class="edit-total-val" style="font-size:14px;">Zeit und FTP eingeben</div></div>';
+    return null;
+  }
+  box.innerHTML = `
+    <div class="edit-total"><div class="edit-total-label">TSS</div><div class="edit-total-val">${r.tss}</div></div>
+    <div class="edit-total"><div class="edit-total-label">IF</div><div class="edit-total-val">${r.if.toFixed(2)}</div></div>
+    <div class="edit-total"><div class="edit-total-label">Kalorien</div><div class="edit-total-val">${r.kcal} kcal</div></div>
+    <div class="edit-total"><div class="edit-total-label">Arbeit</div><div class="edit-total-val">${r.kj} kJ</div></div>
+    <div class="edit-total"><div class="edit-total-label">Ø Tempo</div><div class="edit-total-val">${r.speed} km/h</div></div>`;
+  return r;
+}
+
+function saveEditIndoorRide() {
+  const r = calcIndoorEdit();
+  if (!r) { showToast('⚠ Zeit und FTP eingeben', 3000); return; }
+  const history = getIndoorHistory();
+
+  if (editIndoorIsNew) {
+    const dateVal = document.getElementById('eindoor-datepicker').value;
+    if (!dateVal) { showToast('⚠ Bitte ein Datum wählen', 3000); return; }
+    const [y, m, d] = dateVal.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
+    const ts = dateObj.getTime();
+    if (history.find(e => e.ts === ts)) {
+      showToast('⚠ Für dieses Datum existiert bereits ein Eintrag', 3000); return;
+    }
+    const dateStr = dateObj.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+    const entry = { ts, date: dateStr, ...r };
+    history.push(entry);
+    history.sort((a, b) => b.ts - a.ts);
+    if (history.length > 200) history.splice(200);
+    try {
+      localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(history));
+    } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+    renderIndoorHistory();
+    renderIndoorChart();
+    document.getElementById('edit-indoor-modal').classList.remove('open');
+    editIndoorTs = null; editIndoorIsNew = false;
+    showToast('✓ Eintrag gespeichert');
+    dbAutoSave(() => SupabaseSync.saveIndoor({ ts, date: dateStr, data: entry }));
+    return;
+  }
+
+  if (editIndoorTs === null) return;
+  const idx = history.findIndex(d => d.ts === editIndoorTs);
+  if (idx === -1) return;
+  const ts = editIndoorTs;
+  history[idx] = { ...history[idx], ...r };
+  const entry = history[idx];
+  try {
+    localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(history));
+  } catch(e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+  renderIndoorHistory();
+  renderIndoorChart();
+  document.getElementById('edit-indoor-modal').classList.remove('open');
+  editIndoorTs = null;
+  showToast('✓ Eintrag gespeichert');
+  dbAutoSave(() => SupabaseSync.saveIndoor({ ts, date: entry.date, data: entry }));
+}
+
+// ── Indoor-Rad: Verlaufsdiagramm ────────────────────────────────
+function initIndoorDateRange() {
+  const history = getIndoorHistory();
+  if (!history.length) return;
+  const dates = history.map(d => new Date(d.ts)).sort((a, b) => a - b);
+  const fromEl = document.getElementById('ichart-from');
+  const toEl   = document.getElementById('ichart-to');
+  if (fromEl && !fromEl.value) fromEl.value = toISO(dates[0]);
+  if (toEl   && !toEl.value)   toEl.value   = toISO(new Date());
+}
+
+function resetIndoorDateRange() {
+  const history = getIndoorHistory();
+  if (!history.length) return;
+  const dates = history.map(d => new Date(d.ts)).sort((a, b) => a - b);
+  const fromEl = document.getElementById('ichart-from');
+  const toEl   = document.getElementById('ichart-to');
+  if (fromEl) fromEl.value = toISO(dates[0]);
+  if (toEl)   toEl.value   = toISO(new Date());
+  renderIndoorChart();
+}
+
+function renderIndoorChart() {
+  const canvas     = document.getElementById('indoor-chart');
+  const empty      = document.getElementById('ichart-empty');
+  const rangeEmpty = document.getElementById('ichart-range-empty');
+  if (!canvas) return;
+  const history = getIndoorHistory();
+  const metric  = document.getElementById('ichart-metric')?.value || 'tss';
+  const cfg     = INDOOR_METRIC_CONFIG[metric];
+
+  if (!history.length) {
+    canvas.style.display = 'none'; empty.style.display = 'block';
+    if (rangeEmpty) rangeEmpty.style.display = 'none';
+    if (indoorChartInstance) { indoorChartInstance.destroy(); indoorChartInstance = null; }
+    return;
+  }
+  empty.style.display = 'none';
+  initIndoorDateRange();
+
+  const fromVal  = document.getElementById('ichart-from')?.value;
+  const toVal    = document.getElementById('ichart-to')?.value;
+  const fromDate = fromVal ? new Date(fromVal) : null;
+  const toDate   = toVal   ? new Date(toVal + 'T23:59:59') : null;
+
+  const days = history
+    .filter(d => {
+      const dt = new Date(d.ts);
+      if (fromDate && dt < fromDate) return false;
+      if (toDate   && dt > toDate)   return false;
+      return true;
+    })
+    .sort((a, b) => a.ts - b.ts);
+
+  if (!days.length) {
+    canvas.style.display = 'none';
+    if (rangeEmpty) rangeEmpty.style.display = 'block';
+    if (indoorChartInstance) { indoorChartInstance.destroy(); indoorChartInstance = null; }
+    return;
+  }
+  canvas.style.display = 'block';
+  if (rangeEmpty) rangeEmpty.style.display = 'none';
+
+  const labels = days.map(d => new Date(d.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}));
+  const values = days.map(d => d[metric] ?? 0);
+
+  const isDark    = isDarkMode();
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const textColor = isDark ? '#9b9a94' : '#6b6a65';
+  const bgColor   = isDark ? '#1c1c1a' : '#ffffff';
+
+  if (indoorChartInstance) indoorChartInstance.destroy();
+
+  indoorChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: cfg.label,
+        data: values,
+        borderColor: cfg.color,
+        backgroundColor: cfg.color + '22',
+        borderWidth: 2.5,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: cfg.color,
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 12 }, boxWidth: 16, padding: 16 } },
+        tooltip: {
+          backgroundColor: bgColor, borderColor: gridColor, borderWidth: 1,
+          titleColor: isDark ? '#f0ede6' : '#1a1a18', bodyColor: textColor,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('de-DE')}${cfg.unit ? ' ' + cfg.unit : ''}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { color: gridColor } },
+        y: { beginAtZero: true, ticks: { color: textColor, font: { size: 11 }, callback: v => v.toLocaleString('de-DE') + (cfg.unit ? ' ' + cfg.unit : '') }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+// ── Start ───────────────────────────────────────────────────────
+calcIndoor();
+renderIndoorHistory();

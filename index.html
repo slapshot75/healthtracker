@@ -20,6 +20,7 @@
     <div style="display:flex;">
       <button class="page-nav-btn active" id="pnav-purin" onclick="switchPage('purin')">Lebensmittel & Purin</button>
       <button class="page-nav-btn" id="pnav-walk" onclick="switchPage('walk')">Gehrechner</button>
+      <button class="page-nav-btn" id="pnav-indoor" onclick="switchPage('indoor')">Indoor-Rad</button>
     </div>
     <div class="data-btns" style="padding-bottom:4px;">
       <button id="theme-toggle" class="data-btn" onclick="toggleTheme()" style="padding:0 10px;" title="Design wechseln">Dunkel</button>
@@ -370,6 +371,137 @@
     </div>
 
   </div><!-- /page-walk -->
+
+  <!-- Seite 3: Indoor-Rad -->
+  <div class="page-section" id="page-indoor">
+
+    <div class="tab-box">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="itab-btn-calc"    onclick="switchIndoorTab('calc')">Rechner</button>
+        <button class="tab-btn"        id="itab-btn-history" onclick="switchIndoorTab('history')">Historie</button>
+        <button class="tab-btn"        id="itab-btn-chart"   onclick="switchIndoorTab('chart')">Verlauf</button>
+      </div>
+
+      <!-- Tab: Rechner -->
+      <div class="tab-panel active" id="itab-calc">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:1.25rem;">
+          <button onclick="saveIndoorRide()" id="btn-save-indoor"
+            style="height:34px;padding:0 16px;background:var(--text);color:var(--bg);border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">
+            Einheit speichern
+          </button>
+        </div>
+        <div class="walk-grid">
+          <div class="walk-card">
+            <div class="walk-card-title">Werte der Einheit</div>
+            <div class="walk-field">
+              <div class="walk-label">Zeit (min)</div>
+              <input type="number" id="i-duration" min="1" max="600" step="1" value="60" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-duration-range" min="1" max="600" step="1" value="60" oninput="indoorSliderChanged('i-duration')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Distanz (km)</div>
+              <input type="number" id="i-dist" min="0" max="500" step="0.1" value="0" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-dist-range" min="0" max="200" step="0.1" value="0" oninput="indoorSliderChanged('i-dist')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Höhenmeter (m)</div>
+              <input type="number" id="i-elev" min="0" max="10000" step="1" value="0" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-elev-range" min="0" max="3000" step="10" value="0" oninput="indoorSliderChanged('i-elev')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Ø Trittfrequenz (U/min)</div>
+              <input type="number" id="i-cad" min="0" max="200" step="1" value="85" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-cad-range" min="0" max="160" step="1" value="85" oninput="indoorSliderChanged('i-cad')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Ø Leistung (W)</div>
+              <input type="number" id="i-watts" min="0" max="1000" step="1" value="150" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-watts-range" min="0" max="500" step="1" value="150" oninput="indoorSliderChanged('i-watts')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Normalisierte Leistung (W) <span style="font-size:11px;color:var(--text3);">leer = Ø Leistung</span></div>
+              <input type="number" id="i-np" min="0" max="1000" step="1" placeholder="Ø Leistung" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-np-range" min="0" max="500" step="1" value="150" oninput="indoorSliderChanged('i-np')">
+            </div>
+            <div class="walk-field">
+              <div class="walk-label">Schwellenleistung FTP (W)</div>
+              <input type="number" id="i-ftp" min="50" max="600" step="1" value="150" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-ftp-range" min="50" max="400" step="1" value="150" oninput="indoorSliderChanged('i-ftp')">
+            </div>
+            <div class="walk-field" style="margin-bottom:0;">
+              <div class="walk-label">Wirkungsgrad (%)</div>
+              <input type="number" id="i-eff" min="10" max="30" step="0.5" value="22" oninput="calcIndoor()">
+              <input class="walk-slider" type="range" id="i-eff-range" min="10" max="30" step="0.5" value="22" oninput="indoorSliderChanged('i-eff')">
+            </div>
+          </div>
+
+          <div class="walk-card">
+            <div class="walk-card-title">Ergebnisse</div>
+            <div class="walk-results">
+              <div class="walk-result highlight"><div class="walk-result-label">TSS</div><div class="walk-result-val" id="ri-tss">—</div><div class="walk-result-unit">Belastungspunkte</div></div>
+              <div class="walk-result highlight"><div class="walk-result-label">IF</div><div class="walk-result-val" id="ri-if">—</div><div class="walk-result-unit">NP / FTP</div></div>
+              <div class="walk-result"><div class="walk-result-label">Kalorien</div><div class="walk-result-val" id="ri-kcal">—</div><div class="walk-result-unit">kcal gesamt</div></div>
+              <div class="walk-result"><div class="walk-result-label">Mechanische Arbeit</div><div class="walk-result-val" id="ri-kj">—</div><div class="walk-result-unit">kJ</div></div>
+              <div class="walk-result"><div class="walk-result-label">Ø Geschwindigkeit</div><div class="walk-result-val" id="ri-speed">—</div><div class="walk-result-unit">km/h</div></div>
+              <div class="walk-result"><div class="walk-result-label">Höhenmeter</div><div class="walk-result-val" id="ri-elev">—</div><div class="walk-result-unit">Meter</div></div>
+            </div>
+            <div class="walk-info" id="indoor-info"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Indoor-Historie -->
+      <div class="tab-panel" id="itab-history">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem;">
+          <div>
+            <div class="history-title">Indoor-Historie</div>
+            <div class="history-sub">Gespeicherte Einheiten – lokal im Browser</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="tracker-reset" onclick="openNewIndoorDayModal()">+ Eintrag hinzufügen</button>
+            <button class="tracker-reset" onclick="clearIndoorHistory()" style="color:#E24B4A;border-color:#E24B4A;">Alles löschen</button>
+          </div>
+        </div>
+        <div id="indoor-history-list"><div class="walk-history-empty">Noch keine gespeicherten Einheiten.</div></div>
+      </div>
+
+      <!-- Tab: Indoor-Verlauf -->
+      <div class="tab-panel" id="itab-chart">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem;">
+          <div>
+            <div class="history-title">Verlauf</div>
+            <div class="history-sub">Entwicklung deiner Indoor-Einheiten über die Zeit</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:12px;color:var(--text2);">Von</label>
+              <input type="date" id="ichart-from" onchange="renderIndoorChart()" style="width:150px;font-size:13px;">
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:12px;color:var(--text2);">Bis</label>
+              <input type="date" id="ichart-to" onchange="renderIndoorChart()" style="width:150px;font-size:13px;">
+            </div>
+            <select id="ichart-metric" onchange="renderIndoorChart()" style="width:auto;">
+              <option value="tss">TSS</option>
+              <option value="if">IF</option>
+              <option value="kcal">Kalorien (kcal)</option>
+              <option value="watts">Ø Leistung (W)</option>
+              <option value="np">NP (W)</option>
+              <option value="dist">Distanz (km)</option>
+              <option value="elev">Höhenmeter</option>
+              <option value="dur">Dauer (min)</option>
+              <option value="cad">Trittfrequenz</option>
+            </select>
+            <button onclick="resetIndoorDateRange()" style="height:38px;padding:0 12px;background:none;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;">Alle anzeigen</button>
+          </div>
+        </div>
+        <div id="ichart-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Noch keine gespeicherten Einheiten.</div>
+        <div id="ichart-range-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Keine Daten im gewählten Zeitraum.</div>
+        <div style="position:relative;width:100%;"><canvas id="indoor-chart"></canvas></div>
+      </div>
+    </div>
+
+  </div><!-- /page-indoor -->
 </div>
 
 <!-- Eigenes Lebensmittel hinzufügen Modal -->
@@ -535,7 +667,62 @@
   </div>
 </div>
 
-<script src="js/supabase.js"></script>
+<!-- Indoor-Eintrag bearbeiten Modal -->
+<div class="edit-modal-overlay" id="edit-indoor-modal" onclick="closeEditIndoorModal(event)">
+  <div class="edit-modal" style="max-width:520px;">
+    <div class="edit-modal-header">
+      <div>
+        <div class="edit-modal-title" id="eindoor-title">Indoor-Eintrag bearbeiten</div>
+        <div class="edit-modal-date" id="eindoor-date"></div>
+        <input type="date" id="eindoor-datepicker" style="display:none;margin-top:4px;font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-family:inherit;">
+      </div>
+      <button onclick="closeEditIndoorModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2);font-family:inherit;">×</button>
+    </div>
+    <div class="edit-modal-body" style="overflow-y:auto;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;">
+        <div class="af-field">
+          <label class="af-label">Zeit (min)</label>
+          <input type="number" id="ei-duration" min="1" max="600" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">Distanz (km)</label>
+          <input type="number" id="ei-dist" min="0" max="500" step="0.1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">Höhenmeter (m)</label>
+          <input type="number" id="ei-elev" min="0" max="10000" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">Ø Trittfrequenz (U/min)</label>
+          <input type="number" id="ei-cad" min="0" max="200" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">Ø Leistung (W)</label>
+          <input type="number" id="ei-watts" min="0" max="1000" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">NP (W) · leer = Ø</label>
+          <input type="number" id="ei-np" min="0" max="1000" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">FTP (W)</label>
+          <input type="number" id="ei-ftp" min="50" max="600" step="1" oninput="calcIndoorEdit()">
+        </div>
+        <div class="af-field">
+          <label class="af-label">Wirkungsgrad (%)</label>
+          <input type="number" id="ei-eff" min="10" max="30" step="0.5" oninput="calcIndoorEdit()">
+        </div>
+      </div>
+      <div class="edit-totals" id="eindoor-results"></div>
+    </div>
+    <div class="edit-modal-actions">
+      <button class="btn-cancel" onclick="closeEditIndoorModal()">Abbrechen</button>
+      <button class="btn-confirm" onclick="saveEditIndoorRide()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+><script src="js/supabase.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
