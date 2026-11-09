@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Content-Security-Policy: GitHub Pages erlaubt keine eigenen HTTP-Header, daher als Meta-Tag.
+     Hinweis: 'unsafe-inline' für Skripte ist nötig (138 inline onclick/oninput-Handler, 1 Inline-Skript).
+     Die Policy blockiert damit Datenabfluss an fremde Hosts und fremde Skripte, nicht jeden Inline-Code.
+     frame-ancestors wirkt nur als HTTP-Header und ist hier nicht möglich (Clickjacking-Schutz fehlt).
+     Der Supabase-Host ist fest eingetragen: bei Projektwechsel anpassen. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://sqcdjemmerejltbncqrs.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Healthcheck – Purin & Gehrechner</title>
 <meta name="theme-color" content="#1f6f78">
 <link rel="manifest" href="manifest.json">

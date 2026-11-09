@@ -23,7 +23,7 @@ healthtracker/
 │   ├── pwa.js              # Registriert den Service Worker
 │   └── local-config.js     # Nur lokal: Supabase-Keys für Live Server (.gitignore!)
 ├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
-├── supabase_setup.sql      # Einmalig in Supabase ausführen
+├── supabase/               # SQL: supabase_setup.sql (einmalig) + datierte Migrationen
 └── CLAUDE.md               # Diese Datei
 ```
 
@@ -62,7 +62,7 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 | `walk_history` | Gespeicherte Geh-Einheiten | `ts` |
 | `lebensmittel` | Custom Foods + gecachte Basisdaten | `(user_id, name)` |
 
-- RLS ist **aktiv** (Migration `supabase/2026-11-09-auth-rls.sql`): Zugriff nur für die Rolle `authenticated`, also nur mit Login. Der Anon-Key allein hat keinen Zugriff. `supabase_setup.sql` enthält noch den alten Stand ohne RLS und muss für neue Projekte durch die Migration ergänzt werden.
+- RLS ist **aktiv** (Migration `supabase/2026-11-09-auth-rls.sql`): Zugriff nur für die Rolle `authenticated`, also nur mit Login. Der Anon-Key allein hat keinen Zugriff. `supabase/supabase_setup.sql` enthält noch den alten Stand ohne RLS und muss für neue Projekte durch die Migration ergänzt werden.
 - UPSERT-Strategie: **DELETE + INSERT** (wegen UNIQUE constraints)
 - `lebensmittel`: `user_id = '__base__'` für Basisdaten, eigene `user_id` für Custom Foods
 
@@ -260,6 +260,7 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 - **XSS-Schutz in inline-Handlern** — alle dynamischen Werte in `onclick`/`oninput`-Attributen (item.id, day.ts, d.ts, d._customIdx) werden mit `Number()` erzwungen, damit manipulierte localStorage-Einträge keinen Code einschleusen können
 - **Theme-Toggle** — `data-theme="dark|light"` auf `<html>` überschreibt `@media (prefers-color-scheme)` mit höherer CSS-Spezifität; Anti-Flash-Script im `<head>` setzt `data-theme` vor CSS-Rendering aus localStorage; Charts rufen `isDarkMode()` auf statt direkt `matchMedia`
 - **PWA** — `manifest.json`, `sw.js`, `icons/` und `js/pwa.js` müssen in `.github/workflows/deploy.yml` mitkopiert werden. Neue Dateien in der App-Shell-Liste von `sw.js` ergänzen und `CACHE` bei Änderungen hochzählen.
+- **Content-Security-Policy** steht als `<meta>` in `index.html` (GitHub Pages kann keine Header setzen). Sie enthält den Supabase-Host und die cdnjs-URL fest: bei Projektwechsel oder neuem CDN-Skript die Policy anpassen. `'unsafe-inline'` für Skripte bleibt, solange 138 Inline-Handler im HTML/JS stehen. `e2e/csp.spec.js` prüft die Policy im Browser (Playwright läuft mit `bypassCSP: true`, der CSP-Test überschreibt das).
 - **Abhängigkeiten** — neue Pakete oder CDN-Skripte nur nach Prüfung laut `docs/dependency-policy.md` (Standardfunktionen zuerst, feste Versionen, Entwicklungs-Tools bleiben in `devDependencies`)
 
 ---

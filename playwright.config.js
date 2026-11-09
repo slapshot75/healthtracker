@@ -8,6 +8,9 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
     headless: true,
+    // Die Tests fangen Supabase per Route ab (test.supabase.co). Die CSP würde diese
+    // Anfragen blockieren, bevor sie abgefangen werden. Die CSP prüft e2e/csp.spec.js.
+    bypassCSP: true,
     slowMo: 800,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
