@@ -1239,6 +1239,19 @@ function renderTracker() {
   set("fat",     tot.fat,     "g",    FAT_LIMIT);
 }
 
+// Purin-Limit vom Server übernehmen, wenn dessen Zeitstempel neuer ist als der lokale.
+// Ist der lokale Stand neuer, bleibt er und wird beim nächsten Schreiben nach oben geschickt.
+function applyRemoteLimit(settings) {
+  const remoteLimit   = settings?.purin_limit;
+  const remoteLimitTs = settings?.purin_limit_ts || 0;
+  if (!remoteLimit || remoteLimitTs <= _limitSettings.ts) return;
+  PURIN_LIMIT = remoteLimit;
+  _limitSettings = { limit: remoteLimit, ts: remoteLimitTs };
+  try { localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings)); } catch(e) {}
+  const inp = document.getElementById('purin-limit-input');
+  if (inp) inp.value = remoteLimit;
+}
+
 function setPurinLimit(val) {
   const n = parseInt(val, 10);
   if (!n || n < 50) return;
@@ -1296,15 +1309,21 @@ function checkMidnightReset() {
 
     const tot = calcTotals(trackerItems);
     const history = getHistory();
-    const exists  = history.some(d => d.date === originDate);
-    if (!exists) {
-      const oTs = getDayTs(origin);
-      history.unshift({ ts: oTs, date: originDate, items: [...trackerItems], totals: tot });
-      history.sort((a, b) => b.ts - a.ts);
-      if (history.length > 90) history.splice(90);
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
-      dbAutoSave(() => SupabaseSync.saveDay({ ts: oTs, date: originDate, items: [...trackerItems], totals: tot }));
-    }
+    // Wie "Tag speichern": ein vorhandener Eintrag desselben Tages wird durch den Tracker-Stand
+    // ersetzt (der Tracker enthält alle Nachträge), mit seinem bisherigen Zeitstempel.
+    const idx   = history.findIndex(d => d.date === originDate);
+    const entry = {
+      ts:     idx >= 0 ? history[idx].ts : getDayTs(origin),
+      date:   originDate,
+      items:  [...trackerItems],
+      totals: tot,
+    };
+    if (idx >= 0) history[idx] = entry;
+    else history.unshift(entry);
+    history.sort((a, b) => b.ts - a.ts);
+    if (history.length > 90) history.splice(90);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(e) {}
+    dbAutoSave(() => SupabaseSync.saveDay({ ts: entry.ts, date: entry.date, items: entry.items, totals: entry.totals }));
 
     trackerItems = [];
     saveToStorage(); // setzt auch ITEMS_DATE_KEY = heute
@@ -2330,6 +2349,9 @@ async function syncDownload() {
     localStorage.setItem(INDOOR_HISTORY_KEY, JSON.stringify(mergedIndoor));
     markIndoorSynced();
 
+    // Limit vor dem Tagesverbrauch übernehmen: sonst schreibt saveToStorage() den alten lokalen Wert zurück
+    if (todayRows?.length) applyRemoteLimit(todayRows[0].settings);
+
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
       const todayMidnight = new Date();
@@ -2396,16 +2418,7 @@ async function liveRefresh() {
             ? getTodayStr()
             : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
           try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
-          // Purin-Limit nur übernehmen wenn remote-Limit-Timestamp neuer als lokaler
-          const remoteLimit   = row.settings?.purin_limit;
-          const remoteLimitTs = row.settings?.purin_limit_ts || 0;
-          if (remoteLimit && remoteLimitTs > _limitSettings.ts) {
-            PURIN_LIMIT = remoteLimit;
-            _limitSettings = { limit: remoteLimit, ts: remoteLimitTs };
-            localStorage.setItem('purin_limit_settings', JSON.stringify(_limitSettings));
-            const inp = document.getElementById('purin-limit-input');
-            if (inp) inp.value = remoteLimit;
-          }
+          applyRemoteLimit(row.settings);
           renderTracker();
         }
       } else if (todayRows !== null && trackerItems.length > 0) {
