@@ -69,6 +69,8 @@ test.describe('Supabase – walk_history', () => {
     const entry = { ts: 1700000002000, date: 'Mittwoch, 15.11.2023', km: 4, kcal: 200 };
 
     await page.evaluate((e) => {
+      // Erstgerät simulieren: noch nie synchronisiert
+      localStorage.removeItem('purin_synced_walk');
       localStorage.setItem('purin_walk_history', JSON.stringify([e]));
       liveRefresh();
     }, entry);

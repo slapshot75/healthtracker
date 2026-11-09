@@ -171,7 +171,6 @@ const FAT_LIMIT     = 65;   // g
 - `saveEditWalkDay()` — Geänderten Walk-Eintrag speichern (localStorage + Supabase); erstellt auch neuen Eintrag wenn `editWalkIsNew`
 
 ### Supabase Sync (in app.js)
-- `syncUpload()` — Alle lokalen Daten zu Supabase hochladen (ersetzt Server-Stand je Tabelle)
 - `syncDownload()` — Daten von Supabase laden (Server überschreibt lokal)
 - `setSyncStatus(state, text)` — Sync-Status-Anzeige aktualisieren
 
@@ -193,7 +192,7 @@ Einziger Ort mit HTTP-Zugriffen gegen Supabase. Lädt vor `app.js`. Stellt das O
 - `pullFoods()` — eigene Lebensmittel lesen (sortiert nach `id`)
 - `saveFood(food, oldName?)` — eigenes Lebensmittel speichern; mit `oldName` zuerst den alten Namen entfernen
 - `deleteFood(name)` — eigenes Lebensmittel löschen
-- `replaceFoods(foods)` — alle eigenen Lebensmittel ersetzen (PATCH je Name, POST ohne Treffer, DELETE veralteter Namen zuletzt)
+- `replaceFoods(foods)` — alle eigenen Lebensmittel ersetzen (PATCH je Name, POST ohne Treffer, DELETE veralteter Namen zuletzt). Derzeit ohne Aufrufer in der App; manueller Upload wurde entfernt.
 
 Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob er `setSyncStatus` oder `showToast` nutzt.
 
@@ -283,4 +282,5 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 - Die öffentliche Registrierung ist im Supabase-Dashboard **abgeschaltet**; Benutzer wird manuell angelegt (siehe `supabase/2026-11-09-auth-rls.sql`)
 - Alle Geräte mit derselben Konfiguration teilen sich dieselben Daten (nach Anmeldung)
 - **Server überschreibt immer** die lokalen Daten beim Download
+- **Erstmigration nur einmal:** Lokale Daten werden bei leerem Server nur hochgeladen, solange das Gerät diese Datenart noch nie synchronisiert hat (Marker `purin_synced_purin` / `purin_synced_walk` / `purin_synced_foods` / `purin_indoor_synced` im `localStorage`). Danach bedeutet ein leerer Server „auf einem anderen Gerät gelöscht“ und der lokale Stand wird geleert. Ein Gerät, das offline neue Einträge angelegt hat, verliert diese beim nächsten Abgleich, wenn der Server leer ist.
 - **Live-Sync** aktualisiert automatisch bei Fensterwechsel (kein manueller Trigger nötig)

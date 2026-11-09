@@ -62,12 +62,12 @@ test.describe('Supabase – lebensmittel', () => {
     expect(del.query).toBe('?user_id=eq.mario&name=eq.Alt');
   });
 
-  test('syncUpload: je Lebensmittel PATCH, ohne Treffer POST; veraltete Einträge zuletzt entfernen', async ({ page }) => {
+  test('replaceFoods: je Lebensmittel PATCH, ohne Treffer POST; veraltete Einträge zuletzt entfernen', async ({ page }) => {
     const requests = await setupSupabase(page);
     await page.evaluate((food) => {
       customFoods = [food, { ...food, name: 'Zwei' }];
       localStorage.setItem('purin_custom_foods', JSON.stringify(customFoods));
-      syncUpload();
+      return SupabaseSync.replaceFoods(customFoods);
     }, FOOD);
 
     await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(5);
@@ -89,7 +89,7 @@ test.describe('Supabase – lebensmittel', () => {
     await page.evaluate((food) => {
       customFoods = [food];
       localStorage.setItem('purin_custom_foods', JSON.stringify(customFoods));
-      syncUpload();
+      return SupabaseSync.replaceFoods(customFoods).catch(() => {});
     }, FOOD);
 
     await expect.poll(() => writesTo(requests, 'lebensmittel').length).toBe(2);
@@ -129,6 +129,8 @@ test.describe('Supabase – lebensmittel', () => {
   test('liveRefresh: lädt lokale Lebensmittel hoch, wenn der Server leer ist', async ({ page }) => {
     const requests = await setupSupabase(page);
     await page.evaluate((food) => {
+      // Erstgerät simulieren: noch nie synchronisiert
+      localStorage.removeItem('purin_synced_foods');
       customFoods = [food];
       liveRefresh();
     }, FOOD);
