@@ -514,7 +514,7 @@ async function refreshBaseFoodsFromSupabase() {
       mergeCustomFoods();
       render();
     }
-  } catch(e) { console.warn('Basisdaten-Refresh fehlgeschlagen:', e); }
+  } catch(e) { logSyncError('Basisdaten-Refresh fehlgeschlagen', e); }
 }
 
 function openAddFoodModal() {
@@ -588,7 +588,7 @@ async function saveNewFood() {
       // Bei Bearbeitung wird der alte Name entfernt (Name könnte geändert worden sein)
       await SupabaseSync.saveFood({ name, category, purin, protein, kcal, carbs, fiber, fat }, isEdit ? oldName : null);
     } catch(e) {
-      console.warn('Supabase save failed:', e);
+      logSyncError('Supabase save failed', e);
       setSyncStatus('error', 'Speicherfehler: ' + e.message);
     }
   }
@@ -605,7 +605,7 @@ function deleteCustomFood(idx) {
 
   if (syncReady()) {
     SupabaseSync.deleteFood(name).catch(e => {
-      console.warn('Supabase delete failed:', e);
+      logSyncError('Supabase delete failed', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
     });
   }
@@ -942,6 +942,13 @@ function saveToStorage() {
   dbAutoSave(() => SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
 }
 
+// Protokolliert einen Fehler ohne Rohinhalt: keine Serverantwort, keine Nutzerdaten.
+// Ausgegeben werden nur der feste Kontext und der HTTP-Status (falls vorhanden) oder der Fehlertyp.
+function logSyncError(context, e) {
+  const m = /^(\d{3}):/.exec(String((e && e.message) || ''));
+  console.warn(context, m ? 'HTTP ' + m[1] : ((e && e.name) || 'Fehler'));
+}
+
 // Supabase nur nutzbar, wenn konfiguriert UND angemeldet
 function syncReady() {
   return SupabaseSync.isConfigured() && SupabaseSync.isLoggedIn();
@@ -953,7 +960,7 @@ function dbAutoSave(fn) {
   try {
     if (!syncReady()) return;
     fn().catch(e => {
-      console.warn('Auto-Sync:', e);
+      logSyncError('Auto-Sync', e);
       setSyncStatus('error', 'Schreibfehler: ' + e.message);
     });
   } catch(e) {}
@@ -1019,7 +1026,7 @@ async function deleteDay(ts) {
 
   if (syncReady()) {
     SupabaseSync.deleteDay(ts).catch(e => {
-      console.warn('DB-Löschen fehlgeschlagen:', e);
+      logSyncError('DB-Löschen fehlgeschlagen', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
     });
   }
@@ -1887,7 +1894,7 @@ async function deleteWalkDay(ts) {
 
   if (syncReady()) {
     SupabaseSync.deleteWalk(ts).catch(e => {
-      console.warn('DB-Löschen fehlgeschlagen:', e);
+      logSyncError('DB-Löschen fehlgeschlagen', e);
       setSyncStatus('error', 'Löschfehler: ' + e.message);
     });
   }
@@ -2383,7 +2390,7 @@ async function syncDownload() {
   } catch(e) {
     setSyncStatus('error', 'Fehler');
     showToast('⚠ Download fehlgeschlagen: ' + e.message, 4000);
-    console.error(e);
+    logSyncError('Download fehlgeschlagen', e);
   }
 }
 
@@ -2400,7 +2407,7 @@ async function liveRefresh() {
   _liveRefreshRunning = true;
   try {
     // Ausstehende eigene Schreibvorgänge zuerst nachholen (Warteschlange in supabase.js)
-    try { await SupabaseSync.flushOutbox(); } catch(e) { console.warn('Outbox:', e); }
+    try { await SupabaseSync.flushOutbox(); } catch(e) { logSyncError('Outbox', e); }
     if (!SupabaseSync.hasPending('purin_today')) {
       // Eigene Änderungen dieser Tabelle sind noch nicht gesendet: Serverstand nicht übernehmen
       // Heutigen Tagesverbrauch holen
@@ -2542,7 +2549,7 @@ async function liveRefresh() {
     }
     setSyncStatus('ok', `Sync ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`);
   } catch(e) {
-    console.warn('liveRefresh:', e);
+    logSyncError('liveRefresh', e);
     setSyncStatus('error', 'Lesefehler: ' + e.message);
   }
   finally { _liveRefreshRunning = false; }
