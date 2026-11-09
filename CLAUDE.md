@@ -12,11 +12,15 @@ Persönliche Gesundheits-Web-App mit zwei Hauptbereichen:
 ```
 healthtracker/
 ├── index.html              # HTML-Struktur (kein Inline-CSS, kein Inline-JS)
+├── manifest.json           # PWA-Manifest (Home-Bildschirm-Installation auf iOS/Android)
+├── sw.js                   # Service Worker (Offline-App-Shell, Supabase wird nicht gecacht)
+├── icons/                  # App-Icons (apple-touch-icon.png, icon-192/512.png)
 ├── css/
 │   └── styles.css          # Alle CSS-Regeln
 ├── js/
 │   ├── app.js              # Alle JavaScript-Funktionen + Datenbasis (~2460 Zeilen)
 │   ├── supabase.js         # Alle Supabase-Zugriffe (SupabaseSync), lädt vor app.js
+│   ├── pwa.js              # Registriert den Service Worker
 │   └── local-config.js     # Nur lokal: Supabase-Keys für Live Server (.gitignore!)
 ├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
 ├── supabase_setup.sql      # Einmalig in Supabase ausführen
@@ -252,6 +256,7 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 - **`js/local-config.js`** — für lokale Entwicklung gedacht; steht in `.gitignore` und wird nie committet. **Achtung:** `index.html` bindet die Datei derzeit nicht ein, lokal ohne Pipeline ist Cloud-Sync daher aus. Auf GitHub Pages werden Keys durch die Pipeline ersetzt
 - **XSS-Schutz in inline-Handlern** — alle dynamischen Werte in `onclick`/`oninput`-Attributen (item.id, day.ts, d.ts, d._customIdx) werden mit `Number()` erzwungen, damit manipulierte localStorage-Einträge keinen Code einschleusen können
 - **Theme-Toggle** — `data-theme="dark|light"` auf `<html>` überschreibt `@media (prefers-color-scheme)` mit höherer CSS-Spezifität; Anti-Flash-Script im `<head>` setzt `data-theme` vor CSS-Rendering aus localStorage; Charts rufen `isDarkMode()` auf statt direkt `matchMedia`
+- **PWA** — `manifest.json`, `sw.js`, `icons/` und `js/pwa.js` müssen in `.github/workflows/deploy.yml` mitkopiert werden. Neue Dateien in der App-Shell-Liste von `sw.js` ergänzen und `CACHE` bei Änderungen hochzählen.
 - **Abhängigkeiten** — neue Pakete oder CDN-Skripte nur nach Prüfung laut `docs/dependency-policy.md` (Standardfunktionen zuerst, feste Versionen, Entwicklungs-Tools bleiben in `devDependencies`)
 
 ---

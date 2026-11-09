@@ -66,6 +66,9 @@ jobs:
 
           cp css/styles.css public/css/styles.css
           cp index.html public/index.html
+          cp manifest.json sw.js public/
+          mkdir -p public/icons && cp icons/*.png public/icons/
+          cp js/pwa.js public/js/pwa.js
 
           # Platzhalter nur in der Supabase-Datei ersetzen, app.js unverändert kopieren
           sed "s|SUPABASE_URL_PLACEHOLDER|${SUPABASE_URL}|g" js/supabase.js \
@@ -79,6 +82,9 @@ jobs:
           test -f public/css/styles.css          && echo "OK CSS"           || echo "FEHLT CSS"
           test -f public/js/supabase.js          && echo "OK JS-Supabase"   || echo "FEHLT JS-Supabase"
           test -f public/js/app.js               && echo "OK JS"            || echo "FEHLT JS"
+          test -f public/manifest.json           && echo "OK Manifest"      || echo "FEHLT Manifest"
+          test -f public/sw.js                   && echo "OK Service Worker" || echo "FEHLT Service Worker"
+          test -f public/icons/apple-touch-icon.png && echo "OK Icons"      || echo "FEHLT Icons"
 
       - name: Pages konfigurieren
         uses: actions/configure-pages@v5
