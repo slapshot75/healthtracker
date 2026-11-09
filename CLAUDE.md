@@ -72,7 +72,7 @@ const SUPABASE_KEY = 'SUPABASE_KEY_PLACEHOLDER';   // wird von Pipeline ersetzt
 ## Technischer Stack
 
 - **Reines Vanilla JS** — kein Framework, kein Build-Tool
-- **Chart.js 4.4.1** via CDN für Verlaufsdiagramme
+- **Chart.js 4.6.1** via CDN (mit SRI-Hash) für Verlaufsdiagramme
 - **localStorage** für lokale Datenpersistenz
 - **Supabase REST API** für Cloud-Sync + Live-Sync
 - **CSS Custom Properties** für Dark/Light Mode

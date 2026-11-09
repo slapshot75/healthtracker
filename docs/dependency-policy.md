@@ -6,7 +6,7 @@ Die Richtlinie ist vom Projekt jmanico/trim-reaper (MIT, Copyright 2026 Jim Mani
 
 ## Stand dieses Projekts
 
-- **Laufzeit:** keine npm-Pakete. Chart.js 4.4.1 kommt per CDN (cdnjs), Supabase läuft über `fetch` gegen die REST-API.
+- **Laufzeit:** keine npm-Pakete. Chart.js 4.6.1 kommt per CDN (cdnjs, mit SRI-Hash), Supabase läuft über `fetch` gegen die REST-API.
 - **Entwicklung:** `@playwright/test` und `http-server` (nur in `devDependencies`, nicht im ausgelieferten Code).
 - **Build:** keiner. Das Projekt ist Vanilla JS (siehe CLAUDE.md).
 
