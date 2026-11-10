@@ -1377,9 +1377,11 @@ function parseDayDate(dateStr) {
   return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
 }
 
-// ISO date string YYYY-MM-DD from Date
+// Datum als YYYY-MM-DD in Ortszeit (nicht über toISOString: das rechnet in UTC
+// und liefert östlich von Greenwich um Mitternacht den Vortag)
 function toISO(d) {
-  return d.toISOString().split('T')[0];
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function initDateRange() {
@@ -1426,7 +1428,7 @@ function renderChart() {
 
   const fromVal = document.getElementById('chart-from')?.value;
   const toVal   = document.getElementById('chart-to')?.value;
-  const fromDate = fromVal ? new Date(fromVal) : null;
+  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null; // Ortszeit, nicht UTC
   const toDate   = toVal   ? new Date(toVal + 'T23:59:59') : null;
 
   // Filter and sort chronologically
@@ -1808,9 +1810,7 @@ function saveKcalGoal() {
 
 // Lokales Datum als YYYY-MM-DD (ohne UTC-Verschiebung, passt zu getDayTs)
 function localISO(ts) {
-  const d = new Date(ts);
-  const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return toISO(new Date(ts));
 }
 
 // Kalorien je Tag: Purin-Historie (ohne heute) + purin_today (heute), Gehrechner + Indoor nach Tag gruppiert
@@ -1950,6 +1950,7 @@ async function renderSummary() {
   if (!syncReady()) {
     clear();
     status.textContent = 'Keine Cloud-Verbindung – bitte anmelden, damit der aktuelle Stand geladen werden kann.';
+    renderSummaryChart(); // zeigt den Hinweis statt einer leeren Fläche
     return;
   }
 
@@ -2368,7 +2369,7 @@ function renderWalkChart() {
 
   const fromVal  = document.getElementById('wchart-from')?.value;
   const toVal    = document.getElementById('wchart-to')?.value;
-  const fromDate = fromVal ? new Date(fromVal) : null;
+  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null; // Ortszeit, nicht UTC
   const toDate   = toVal   ? new Date(toVal + 'T23:59:59') : null;
 
   let days = [...history]
@@ -3237,7 +3238,7 @@ function renderIndoorChart() {
 
   const fromVal  = document.getElementById('ichart-from')?.value;
   const toVal    = document.getElementById('ichart-to')?.value;
-  const fromDate = fromVal ? new Date(fromVal) : null;
+  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null; // Ortszeit, nicht UTC
   const toDate   = toVal   ? new Date(toVal + 'T23:59:59') : null;
 
   const days = history
