@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase, writesTo } from './support/supabase-mock.js';
 
 // Regressionstest: Die Anmeldung (syncDownload) darf ein neueres Server-Limit nicht

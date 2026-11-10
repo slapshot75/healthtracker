@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 
 // Indoor-Rad-Rechner: feste Eingaben, von Hand nachgerechnete Ergebnisse.
 //   IF   = NP / FTP

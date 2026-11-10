@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/fixtures.js');
 
 test('Lebensmitteltabelle wird geladen', async ({ page }) => {
   await page.goto('/');

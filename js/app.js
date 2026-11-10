@@ -1986,7 +1986,8 @@ async function renderSummary() {
       + ' · Purin: letzte 90 Tage · Einheiten: letzte 200 je Art';
 
     summaryDaily = buildSummaryDaily(days, today, burnRows);
-    renderSummaryChart();
+    // Ein Fehler im Diagramm (z. B. Chart.js nicht geladen) darf die Bilanz nicht als Ladefehler ausweisen
+    try { renderSummaryChart(); } catch (e) { console.warn('Verlauf konnte nicht gezeichnet werden:', e.message); }
   } catch (e) {
     logSyncError('Kalorienbilanz laden', e);
     clear();

@@ -22,7 +22,9 @@ healthtracker/
 │   ├── supabase.js         # Alle Supabase-Zugriffe (SupabaseSync), lädt vor app.js
 │   ├── pwa.js              # Registriert den Service Worker
 │   └── local-config.js     # Nur lokal: Supabase-Keys für Live Server (.gitignore!)
-├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages
+├── .github/workflows/deploy.yml  # CI/CD Pipeline für GitHub Pages (Test → Deploy → Smoke)
+├── e2e/                    # Playwright-Tests (*.spec.js) + support/ (Supabase-Attrappe, Fixtures)
+├── playwright.config.js    # Testkonfiguration (Zeitzone Europe/Berlin, Locale de-DE)
 ├── supabase/               # SQL: supabase_setup.sql (einmalig) + datierte Migrationen
 └── CLAUDE.md               # Diese Datei
 ```
@@ -35,6 +37,8 @@ healthtracker/
 - **Branch:** `main`
 - **Pipeline:** `.github/workflows/deploy.yml` injiziert Supabase-Keys via `sed` in `js/supabase.js` (`js/app.js` wird unverändert kopiert)
 - **Supabase-Keys** werden NICHT im Repository gespeichert — nur als GitHub Secrets
+- **Pages-Source muss „GitHub Actions“ sein** (Settings → Pages). Mit „Deploy from a branch“ veröffentlicht GitHub zusätzlich die Rohdateien mit Platzhaltern; die Anmeldung scheitert dann mit 405.
+- **Drei Jobs:** `test` (Syntax-Check `npm run check`, dann E2E) → `deploy` (bricht ab, wenn ein Secret fehlt oder ein Platzhalter übrig bleibt) → `smoke` (prüft die Live-Seite: `CACHE`-Version aus `sw.js` ist ausgeliefert, kein Platzhalter in `js/supabase.js`). Der Smoke-Job vergleicht die `CACHE`-Version, deshalb `CACHE` bei jeder Änderung hochzählen.
 
 ### GitHub Secrets
 | Key | Beschreibung |
@@ -188,6 +192,7 @@ Einziger Ort mit HTTP-Zugriffen gegen Supabase. Lädt vor `app.js`. Stellt das O
 - `saveDay({ts, date, items, totals})` / `deleteDay(ts)` / `clearDays()` — Purin-Historie (`purin_history`)
 - `saveWalk({ts, date, data})` / `deleteWalk(ts)` / `clearWalks()` / `pullWalks()` — Geh-Historie (`walk_history`)
 - `pushToday({ts, items, settings})` / `pullToday()` — Tagesverbrauch (`purin_today`, UNIQUE auf `user_id`)
+- `saveSettings(settings)` — setzt nur die Spalte `settings` von `purin_today` (items und ts bleiben); ohne Zeile wird eine leere angelegt
 - `pullDays()` — Purin-Historie lesen (letzte 90 Tage, neueste zuerst)
 - `pullBaseFoods()` — Basisdaten (`lebensmittel`, `user_id='__base__'`, nur lesen)
 - `pullFoods()` — eigene Lebensmittel lesen (sortiert nach `id`)
@@ -202,6 +207,13 @@ Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob 
   - Wird aufgerufen: beim Laden, bei `window focus`, bei `visibilitychange`
   - Aktualisiert Tracker, Purin-Historie und Walk-Historie falls Änderungen vorliegen
 
+### Gesamtverbrauch (Seite `summary`)
+- `renderSummary()` — Kalorienbilanz aus dem Serverstand (`pullDays`, `pullToday`, `pullWalks`, `pullIndoor`); ohne Anmeldung nur ein Hinweis
+- `buildSummaryDaily(days, today, burnRows)` — Kalorien je Tag: Aufnahme aus `purin_history` (ohne heute) + `purin_today`, Verbrauch aus Gehrechner und Indoor-Rad
+- `renderSummaryChart()` / `initSummaryDateRange(keys)` / `resetSummaryDateRange()` — Verlauf („Aufgenommen & Verbraucht“ oder „Differenz“); Tage ohne Eintrag sind Lücken, keine Nullen
+- **Kalorienziel:** `_kcalGoal` (`{value, ts}`, `localStorage` `purin_kcal_goal`), `saveKcalGoal()`, `applyRemoteKcalGoal(settings)`, `showKcalGoalInput()`. Liegt wie das Purin-Limit in `purin_today.settings` (`kcal_goal`, `kcal_goal_ts`), der neuere Zeitstempel gewinnt
+- `currentSyncSettings()` — alle Werte für `purin_today.settings`; jeder Schreibvorgang auf `purin_today` schickt die ganze Liste
+
 ### Gehrechner
 - `calcWalk()` — Berechnet Strecke, Höhenmeter, kcal, MET, HR, Schritte, Wasser
 - `calcWalkEdit()` — Neuberechnung im Edit-Modal
@@ -213,7 +225,7 @@ Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob 
 - `renderWalkChart()` — Walk-Verlaufsdiagramm mit Chart.js
 - `initDateRange()` / `resetDateRange()` — Datumsbereich für Purin-Chart
 - `initWalkDateRange()` / `resetWalkDateRange()` — Datumsbereich für Walk-Chart
-- `parseDayDate(dateStr)` / `toISO(d)` — Datums-Hilfsfunktionen
+- `parseDayDate(dateStr)` / `toISO(d)` / `localISO(ts)` — Datums-Hilfsfunktionen. `toISO` liefert das Datum in **Ortszeit** (nie `toISOString()` dafür verwenden: UTC ergibt in Deutschland um Mitternacht den Vortag). Datumsfelder werden mit `new Date(wert + 'T00:00:00')` gelesen
 - `METRIC_CONFIG` — Metriken für Purin-Chart (purin, kcal, protein, etc.)
 - `WALK_METRIC_CONFIG` — Metriken für Walk-Chart (km, kcal, steps, etc.)
 
@@ -235,12 +247,14 @@ Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob 
 
 ```bash
 # 1. Änderungen direkt via Claude Code im Repo bearbeiten
+# 1a. Vor dem Push: npm run check && npx playwright test
+#     (ein roter Test stoppt den Deploy; Charakterisierungstests prüfen Request-Körper exakt)
 # 2. Committen und pushen
 git add .
 git commit -m "Feature/Fix: Beschreibung"
 git push origin main   # Remote heißt hier "origin" (https://github.com/slapshot75/healthtracker.git)
 
-# 3. Pipeline abwarten (~2 Min, Tests + Deploy) → grün ✓
+# 3. Pipeline abwarten (~3 Min, Tests + Deploy + Smoke) → grün ✓
 # 4. App aufrufen: https://slapshot75.github.io/healthtracker/
 # 5. Ctrl+Shift+R für Hard Reload
 ```
@@ -262,6 +276,18 @@ git push origin main   # Remote heißt hier "origin" (https://github.com/slapsho
 - **PWA** — `manifest.json`, `sw.js`, `icons/` und `js/pwa.js` müssen in `.github/workflows/deploy.yml` mitkopiert werden. Neue Dateien in der App-Shell-Liste von `sw.js` ergänzen und `CACHE` bei Änderungen hochzählen.
 - **Content-Security-Policy** steht als `<meta>` in `index.html` (GitHub Pages kann keine Header setzen). Sie enthält den Supabase-Host und die cdnjs-URL fest: bei Projektwechsel oder neuem CDN-Skript die Policy anpassen. `'unsafe-inline'` für Skripte bleibt, solange 138 Inline-Handler im HTML/JS stehen. `e2e/csp.spec.js` prüft die Policy im Browser (Playwright läuft mit `bypassCSP: true`, der CSP-Test überschreibt das).
 - **Abhängigkeiten** — neue Pakete oder CDN-Skripte nur nach Prüfung laut `docs/dependency-policy.md` (Standardfunktionen zuerst, feste Versionen, Entwicklungs-Tools bleiben in `devDependencies`)
+
+---
+
+## Tests (Playwright, `e2e/`)
+
+- Start: `npx playwright test` (startet `http-server` auf Port 3000). Syntax-Check: `npm run check`.
+- Specs importieren `test`/`expect` aus `e2e/support/fixtures.js`, nicht direkt aus `@playwright/test`. Die Fixture liefert Chart.js aus einem lokalen Cache statt vom CDN (`e2e/support/chartjs-cache.js` lädt die Datei einmal je Lauf und prüft sie gegen den SRI-Hash aus `index.html`).
+- `e2e/support/supabase-mock.js` — `setupSupabase(page, responses, {loggedIn})` fängt alle Supabase-Aufrufe ab und zeichnet sie auf. Später registrierte `page.route`-Regeln im Test haben Vorrang (so simuliert `auth-refresh.spec.js` ein 401).
+- Tests laufen in `Europe/Berlin`. Hängt ein Test an „heute“, die Uhr festsetzen (`page.clock.setFixedTime`, siehe `summary.spec.js`), sonst kippt er um Mitternacht.
+- Rechenlogik wird mit von Hand nachgerechneten, exakten Werten geprüft (`walk.spec.js`, `indoor.spec.js`).
+- Auf Ubuntu 26.04 unterstützt Playwright den Browser-Download nicht: `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` vor `npx playwright install chromium` und vor dem Testlauf setzen.
+- `npm ci --dry-run` nicht verwenden: es leert `node_modules`.
 
 ---
 

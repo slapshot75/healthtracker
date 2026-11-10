@@ -1,11 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase, writesTo } from './support/supabase-mock.js';
 
 // Seite "Gesamtverbrauch": Kalorienbilanz, Verlauf und Kalorienziel.
-// Die Zeitstempel hängen an "jetzt", damit "heute" unabhängig vom Testdatum stimmt.
+// Die Uhr im Browser steht fest auf dem 15.06.2026, 12:00 Uhr (Europe/Berlin). So hängt
+// "heute" nicht an der echten Uhrzeit und der Test bleibt auch um Mitternacht stabil.
 
 const DAY = 24 * 60 * 60 * 1000;
-const NOW = Date.now();
+const NOW = Date.UTC(2026, 5, 15, 10, 0, 0);
+
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(NOW);
+});
 const EARLIER = NOW - 3 * DAY;
 
 const SERVER = {
@@ -58,6 +63,16 @@ test.describe('Gesamtverbrauch – Kalorienbilanz', () => {
     await expect(page.locator('#sum-status')).toContainText('Keine Cloud-Verbindung');
     await expect(page.locator('#sum-intake')).toHaveText('—');
     await expect(page.locator('#schart-empty')).toBeVisible();
+  });
+
+  test('Chart.js nicht ladbar: Bilanz erscheint trotzdem, kein falscher Ladefehler', async ({ page }) => {
+    await page.route('https://cdnjs.cloudflare.com/**', (route) => route.abort('failed'));
+    await setupSupabase(page, SERVER);
+    expect(await page.evaluate(() => typeof Chart)).toBe('undefined');
+    await openSummary(page);
+
+    await expect(page.locator('#sum-intake')).toHaveText('2.400');
+    await expect(page.locator('#sum-balance')).toHaveText('+1.650');
   });
 
   test('Ladefehler: Fehlermeldung, keine Zahlen', async ({ page }) => {

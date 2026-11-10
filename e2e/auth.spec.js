@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase, readsFrom, TEST_PASSWORD } from './support/supabase-mock.js';
 
 // Charakterisierungstests für die Passwort-Anmeldung (Supabase Auth).

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase, writesTo, readsFrom } from './support/supabase-mock.js';
 
 // Charakterisierungstests für die Purin-Historie gegen Supabase.

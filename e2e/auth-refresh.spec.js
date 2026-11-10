@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase, SUPABASE } from './support/supabase-mock.js';
 
 // Sitzungs-Erneuerung in js/supabase.js: Antwortet der Server mit 401, wird das Token

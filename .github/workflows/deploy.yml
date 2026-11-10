@@ -30,7 +30,10 @@ jobs:
           node-version: '20'
 
       - name: Abhängigkeiten installieren
-        run: npm install
+        run: npm ci
+
+      - name: Syntax prüfen
+        run: npm run check
 
       - name: Playwright-Browser installieren
         run: npx playwright install --with-deps chromium
@@ -52,6 +55,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -76,15 +81,18 @@ jobs:
             > public/js/supabase.js
           cp js/app.js public/js/app.js
 
-          # Verifikation
-          grep -q "supabase.co" public/js/supabase.js && echo "OK SUPABASE_URL"  || echo "FEHLT SUPABASE_URL"
-          grep -q "eyJ"         public/js/supabase.js && echo "OK SUPABASE_KEY"  || echo "FEHLT SUPABASE_KEY"
-          test -f public/css/styles.css          && echo "OK CSS"           || echo "FEHLT CSS"
-          test -f public/js/supabase.js          && echo "OK JS-Supabase"   || echo "FEHLT JS-Supabase"
-          test -f public/js/app.js               && echo "OK JS"            || echo "FEHLT JS"
-          test -f public/manifest.json           && echo "OK Manifest"      || echo "FEHLT Manifest"
-          test -f public/sw.js                   && echo "OK Service Worker" || echo "FEHLT Service Worker"
-          test -f public/icons/apple-touch-icon.png && echo "OK Icons"      || echo "FEHLT Icons"
+          # Verifikation: bricht den Deploy ab, statt eine kaputte Seite zu veröffentlichen
+          fail=0
+          check() { if eval "$2"; then echo "OK $1"; else echo "::error::FEHLT $1"; fail=1; fi; }
+          check "Secret SUPABASE_URL"      '[ -n "$SUPABASE_URL" ]'
+          check "Secret SUPABASE_ANON_KEY" '[ -n "$SUPABASE_ANON_KEY" ]'
+          check "Supabase-URL eingesetzt"  'grep -q "supabase.co" public/js/supabase.js'
+          check "Supabase-Key eingesetzt"  'grep -q "eyJ" public/js/supabase.js'
+          check "kein Platzhalter übrig"   '! grep -qE "SUPABASE_(URL|KEY)_PLACEHOLDER" public/js/supabase.js'
+          for f in index.html css/styles.css js/supabase.js js/app.js js/pwa.js manifest.json sw.js icons/apple-touch-icon.png; do
+            check "$f" "[ -s public/$f ]"
+          done
+          exit $fail
 
       - name: Pages konfigurieren
         uses: actions/configure-pages@v5
@@ -97,3 +105,35 @@ jobs:
       - name: Deployen
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # Prüft die veröffentlichte Seite: richtige Version live, Keys eingesetzt
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Live-Seite prüfen
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: |
+          base="${PAGE_URL%/}"
+          want="$(grep -o "healthcheck-v[0-9]*" sw.js | head -1)"
+          echo "Prüfe $base, erwartet $want"
+          # Die Auslieferung braucht nach dem Deploy einen Moment: bis zu 3 Minuten warten
+          for i in $(seq 1 18); do
+            live="$(curl -fsS "$base/sw.js?t=$i" | grep -o "healthcheck-v[0-9]*" | head -1 || true)"
+            [ "$live" = "$want" ] && break
+            echo "Versuch $i: live ist '$live'"
+            sleep 10
+          done
+          fail=0
+          check() { if eval "$2"; then echo "OK $1"; else echo "::error::FEHLT $1"; fail=1; fi; }
+          curl -fsS "$base/js/supabase.js?t=$RANDOM" -o supabase.live.js || true
+          check "Version $want ist live"       '[ "$live" = "$want" ]'
+          check "Startseite erreichbar"        'curl -fsS -o /dev/null "$base/"'
+          check "app.js erreichbar"            'curl -fsS -o /dev/null "$base/js/app.js"'
+          check "Supabase-URL eingesetzt"      'grep -q "supabase.co" supabase.live.js'
+          check "kein Platzhalter ausgeliefert" '! grep -qE "SUPABASE_(URL|KEY)_PLACEHOLDER" supabase.live.js'
+          exit $fail

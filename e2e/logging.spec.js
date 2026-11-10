@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase } from './support/supabase-mock.js';
 
 // Regressionstest: Fehlerprotokolle enthalten nur den Status, nie den Serverantworttext.

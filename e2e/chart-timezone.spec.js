@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 
 // Regressionstest: Der Datumsbereich der Verlaufsdiagramme rechnet in Ortszeit.
 // Früher lief die Umrechnung über UTC (toISOString / new Date('YYYY-MM-DD')). In

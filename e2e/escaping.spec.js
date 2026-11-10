@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures.js';
 import { setupSupabase } from './support/supabase-mock.js';
 
 // Regressionstest: Gespeicherte Werte aus der Datenbank dürfen nie als HTML ausgeführt werden.

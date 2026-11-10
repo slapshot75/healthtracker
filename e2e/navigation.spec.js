@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/fixtures.js');
 
 test('App lädt mit korrektem Titel', async ({ page }) => {
   await page.goto('/');
