@@ -308,6 +308,19 @@ const SupabaseSync = (() => {
   }
   const pushToday = (p) => write('pushToday', 'purin_today', null, [{ ts: p.ts, items: p.items, settings: p.settings }]);
 
+  // Nur die settings-Spalte setzen; items und ts der Zeile bleiben unberührt.
+  async function saveSettingsNow(settings) {
+    const updated = await request('PATCH', 'purin_today', {
+      query: `?${userFilter()}`,
+      body: { settings },
+      prefer: 'return=representation',
+    });
+    if (!(Array.isArray(updated) && updated.length > 0)) {
+      await request('POST', 'purin_today', { body: { user_id: USER_ID, ts: Date.now(), items: [], settings } });
+    }
+  }
+  const saveSettings = (settings) => write('saveSettings', 'purin_today', null, [settings]);
+
   // Liefert ein Array mit höchstens einer Zeile (leeres Array, wenn nichts vorliegt).
   function pullToday() {
     return request('GET', 'purin_today', { query: `?${userFilter()}&order=ts.desc&limit=1` });
@@ -336,6 +349,7 @@ const SupabaseSync = (() => {
     deleteFood:   (name) => deleteFoodNow(name),
     replaceFoods: (foods) => replaceFoodsNow(foods),
     pushToday:    (p) => pushTodayNow(p),
+    saveSettings: (s) => saveSettingsNow(s),
   };
 
   return {
@@ -345,7 +359,7 @@ const SupabaseSync = (() => {
     saveWalk, deleteWalk, clearWalks, pullWalks,
     pullDays,
     pullBaseFoods, pullFoods, saveFood, deleteFood, replaceFoods,
-    pushToday, pullToday,
+    pushToday, pullToday, saveSettings,
     saveIndoor, deleteIndoor, clearIndoor, pullIndoor,
   };
 })();

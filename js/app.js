@@ -751,6 +751,16 @@ let trackerItems = [];
 let selectedFood = null;
 let _limitSettings = JSON.parse(localStorage.getItem('purin_limit_settings') || '{"limit":180,"ts":0}');
 let PURIN_LIMIT = _limitSettings.limit;
+
+// Kalorienziel: { value: kcal | null, ts } – liegt in purin_today.settings (geräteübergreifend)
+const KCAL_GOAL_KEY = 'purin_kcal_goal';
+let _kcalGoal = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem(KCAL_GOAL_KEY) || 'null');
+    if (s && typeof s === 'object') return { value: s.value ?? null, ts: s.ts || 0 };
+  } catch (e) {}
+  return { value: null, ts: 0 };
+})();
 const KCAL_LIMIT    = 2000;
 const PROTEIN_LIMIT = 75;
 const CARBS_LIMIT   = 250;
@@ -939,7 +949,7 @@ function saveToStorage() {
   _lastSavedTs = ts;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerItems)); } catch(e) {}
   try { localStorage.setItem(ITEMS_DATE_KEY, getTodayStr()); } catch(e) {}
-  dbAutoSave(() => SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } }));
+  dbAutoSave(() => SupabaseSync.pushToday({ ts, items: trackerItems, settings: currentSyncSettings() }));
 }
 
 // Protokolliert einen Fehler ohne Rohinhalt: keine Serverantwort, keine Nutzerdaten.
@@ -1759,7 +1769,176 @@ function switchPage(name) {
 
 // ── Kalorienbilanz: aufgenommen (Purin-Tracker) gegen verbraucht (Gehrechner, Indoor-Rad) ──
 // Liest immer den Serverstand. Ohne Cloud-Verbindung wird nichts aus dem lokalen Speicher angezeigt.
+let summaryDaily = null;        // { intake: Map<dayTs, kcal>, burn: Map<dayTs, kcal> }
+let summaryChartInstance = null;
+
+// Alle Werte, die in purin_today.settings liegen (jedes Schreiben schickt die ganze Liste)
+function currentSyncSettings() {
+  return {
+    purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts,
+    kcal_goal: _kcalGoal.value, kcal_goal_ts: _kcalGoal.ts,
+  };
+}
+
+function showKcalGoalInput() {
+  const el = document.getElementById('sum-goal');
+  if (el) el.value = _kcalGoal.value ?? '';
+}
+
+// Kalorienziel vom Server übernehmen, wenn dessen Zeitstempel neuer ist (wie beim Purin-Limit)
+function applyRemoteKcalGoal(settings) {
+  const ts = settings?.kcal_goal_ts || 0;
+  if (!ts || ts <= _kcalGoal.ts) return;
+  const value = settings.kcal_goal ?? null;
+  _kcalGoal = { value, ts };
+  try { localStorage.setItem(KCAL_GOAL_KEY, JSON.stringify(_kcalGoal)); } catch (e) {}
+  showKcalGoalInput();
+}
+
+function saveKcalGoal() {
+  const el = document.getElementById('sum-goal');
+  const val = parseFloat(el.value);
+  const value = (el.value === '' || !(val >= 0)) ? null : Math.round(val);
+  _kcalGoal = { value, ts: Date.now() };
+  try { localStorage.setItem(KCAL_GOAL_KEY, JSON.stringify(_kcalGoal)); } catch (e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+  showKcalGoalInput();
+  showToast(value == null ? 'Kalorienziel entfernt' : '✓ Kalorienziel gespeichert');
+  dbAutoSave(() => SupabaseSync.saveSettings(currentSyncSettings()));
+}
+
+// Lokales Datum als YYYY-MM-DD (ohne UTC-Verschiebung, passt zu getDayTs)
+function localISO(ts) {
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Kalorien je Tag: Purin-Historie (ohne heute) + purin_today (heute), Gehrechner + Indoor nach Tag gruppiert
+function buildSummaryDaily(days, today, burnRows) {
+  const todayKey = getDayTs();
+  const intake = new Map();
+  const burn   = new Map();
+  days.forEach(r => {
+    const k = getDayTs(r.ts);
+    if (k === todayKey || r.totals?.kcal == null) return;
+    intake.set(k, (intake.get(k) || 0) + (Number(r.totals.kcal) || 0));
+  });
+  if (today[0]) {
+    intake.set(todayKey, (today[0].items || []).reduce((s, i) => s + (Number(i.kcal) || 0), 0));
+  }
+  burnRows.forEach(r => {
+    if (r.data?.kcal == null) return;
+    const k = getDayTs(r.ts);
+    burn.set(k, (burn.get(k) || 0) + (Number(r.data.kcal) || 0));
+  });
+  return { intake, burn };
+}
+
+function initSummaryDateRange(keys) {
+  const fromEl = document.getElementById('schart-from');
+  const toEl   = document.getElementById('schart-to');
+  if (!keys.length || !fromEl || !toEl) return;
+  if (!fromEl.value) fromEl.value = localISO(keys[0]);
+  if (!toEl.value)   toEl.value   = localISO(Date.now());
+}
+
+function resetSummaryDateRange() {
+  const keys = summaryDaily ? [...new Set([...summaryDaily.intake.keys(), ...summaryDaily.burn.keys()])].sort((a, b) => a - b) : [];
+  if (!keys.length) return;
+  const fromEl = document.getElementById('schart-from');
+  const toEl   = document.getElementById('schart-to');
+  if (fromEl) fromEl.value = localISO(keys[0]);
+  if (toEl)   toEl.value   = localISO(Date.now());
+  renderSummaryChart();
+}
+
+function renderSummaryChart() {
+  const canvas     = document.getElementById('summary-chart');
+  const empty      = document.getElementById('schart-empty');
+  const rangeEmpty = document.getElementById('schart-range-empty');
+  if (!canvas) return;
+  const metric = document.getElementById('schart-metric')?.value || 'both';
+
+  const keys = summaryDaily
+    ? [...new Set([...summaryDaily.intake.keys(), ...summaryDaily.burn.keys()])].sort((a, b) => a - b)
+    : [];
+
+  const hideChart = () => {
+    canvas.style.display = 'none';
+    if (summaryChartInstance) { summaryChartInstance.destroy(); summaryChartInstance = null; }
+  };
+
+  if (!keys.length) {
+    hideChart();
+    empty.style.display = 'block';
+    if (rangeEmpty) rangeEmpty.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  initSummaryDateRange(keys);
+
+  const fromVal = document.getElementById('schart-from')?.value || '';
+  const toVal   = document.getElementById('schart-to')?.value || '';
+  const shown = keys.filter(k => {
+    const d = localISO(k);
+    return (!fromVal || d >= fromVal) && (!toVal || d <= toVal);
+  });
+
+  if (!shown.length) {
+    hideChart();
+    if (rangeEmpty) rangeEmpty.style.display = 'block';
+    return;
+  }
+  canvas.style.display = 'block';
+  if (rangeEmpty) rangeEmpty.style.display = 'none';
+
+  const { intake, burn } = summaryDaily;
+  const labels  = shown.map(k => new Date(k).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}));
+  const inVals  = shown.map(k => intake.has(k) ? intake.get(k) : null);
+  const outVals = shown.map(k => burn.has(k) ? burn.get(k) : null);
+  const diffVals = shown.map((k, i) => (inVals[i] != null && outVals[i] != null) ? inVals[i] - outVals[i] : null);
+
+  const isDark    = isDarkMode();
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const textColor = isDark ? '#9b9a94' : '#6b6a65';
+  const bgColor   = isDark ? '#1c1c1a' : '#ffffff';
+
+  const line = (label, data, color) => ({
+    label, data, borderColor: color, backgroundColor: color + '22',
+    borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
+    fill: false, tension: 0.3, spanGaps: true,
+  });
+  const datasets = metric === 'diff'
+    ? [line('Differenz (kcal)', diffVals, '#378ADD')]
+    : [line('Aufgenommen (kcal)', inVals, '#EF9F27'), line('Verbraucht (kcal)', outVals, '#639922')];
+  const fmt = v => v.toLocaleString('de-DE');
+
+  if (summaryChartInstance) summaryChartInstance.destroy();
+
+  summaryChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 12 }, boxWidth: 16, padding: 16 } },
+        tooltip: {
+          backgroundColor: bgColor, borderColor: gridColor, borderWidth: 1,
+          titleColor: isDark ? '#f0ede6' : '#1a1a18', bodyColor: textColor,
+          callbacks: { label: ctx => ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { color: gridColor } },
+        y: { beginAtZero: metric !== 'diff', ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
 async function renderSummary() {
+  showKcalGoalInput();
   const status = document.getElementById('sum-status');
   const fmt    = n => Math.round(n).toLocaleString('de-DE');
   const sumKcal = (rows, pick) => rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0);
@@ -1783,6 +1962,7 @@ async function renderSummary() {
       SupabaseSync.pullIndoor(),
     ]);
     if (![days, today, walks, indoor].every(Array.isArray)) throw new Error('Unerwartete Antwort');
+    applyRemoteKcalGoal(today[0]?.settings);
 
     // Heute kommt aus purin_today (Live-Stand), vergangene Tage aus purin_history – kein Doppelzählen.
     const todayMs      = getDayTs();
@@ -1803,6 +1983,9 @@ async function renderSummary() {
     set('sum-today-balance', diff(todayIntake - todayBurn));
     status.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
       + ' · Purin: letzte 90 Tage · Einheiten: letzte 200 je Art';
+
+    summaryDaily = buildSummaryDaily(days, today, burnRows);
+    renderSummaryChart();
   } catch (e) {
     logSyncError('Kalorienbilanz laden', e);
     clear();
@@ -2411,7 +2594,7 @@ async function syncDownload() {
     markIndoorSynced();
 
     // Limit vor dem Tagesverbrauch übernehmen: sonst schreibt saveToStorage() den alten lokalen Wert zurück
-    if (todayRows?.length) applyRemoteLimit(todayRows[0].settings);
+    if (todayRows?.length) { applyRemoteLimit(todayRows[0].settings); applyRemoteKcalGoal(todayRows[0].settings); }
 
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
@@ -2480,12 +2663,13 @@ async function liveRefresh() {
             : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
           try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
           applyRemoteLimit(row.settings);
+          applyRemoteKcalGoal(row.settings);
           renderTracker();
         }
       } else if (todayRows !== null && trackerItems.length > 0) {
         // Kein DB-Eintrag für 'mario' → Erstmigration: lokal hochladen
         const ts = Date.now();
-        await SupabaseSync.pushToday({ ts, items: trackerItems, settings: { purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts } });
+        await SupabaseSync.pushToday({ ts, items: trackerItems, settings: currentSyncSettings() });
         _lastSavedTs = ts;
       }
     }
@@ -2636,6 +2820,7 @@ function toggleTheme() {
   updateThemeBtn();
   if (document.getElementById('tab-chart')?.classList.contains('active')) renderChart();
   if (document.getElementById('wtab-chart')?.classList.contains('active')) renderWalkChart();
+  if (summaryDaily) renderSummaryChart();
 }
 
 function initTheme() {
