@@ -752,17 +752,10 @@ let selectedFood = null;
 let _limitSettings = JSON.parse(localStorage.getItem('purin_limit_settings') || '{"limit":180,"ts":0}');
 let PURIN_LIMIT = _limitSettings.limit;
 
-// Kalorienziel: { value: kcal | null, ts } – liegt in purin_today.settings (geräteübergreifend)
-const KCAL_GOAL_KEY = 'purin_kcal_goal';
-let _kcalGoal = (() => {
-  try {
-    const s = JSON.parse(localStorage.getItem(KCAL_GOAL_KEY) || 'null');
-    if (s && typeof s === 'object') return { value: s.value ?? null, ts: s.ts || 0 };
-  } catch (e) {}
-  return { value: null, ts: 0 };
-})();
+// Altes Kalorienziel (entfernt): lokalen Rest löschen
+try { localStorage.removeItem('purin_kcal_goal'); } catch (e) {}
 
-// Grundverbrauch ohne Sport (kcal/Tag): { value: kcal | null, ts } – wie das Kalorienziel in purin_today.settings
+// Grundverbrauch ohne Sport (kcal/Tag): { value: kcal | null, ts } – liegt in purin_today.settings (geräteübergreifend)
 const BASE_BURN_KEY = 'purin_base_burn';
 let _baseBurn = (() => {
   try {
@@ -1788,16 +1781,13 @@ let summaryChartInstance = null;
 function currentSyncSettings() {
   return {
     purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts,
-    kcal_goal: _kcalGoal.value, kcal_goal_ts: _kcalGoal.ts,
     base_burn: _baseBurn.value, base_burn_ts: _baseBurn.ts,
   };
 }
 
-function showKcalGoalInput() {
-  const el = document.getElementById('sum-goal');
-  if (el) el.value = _kcalGoal.value ?? '';
-  const bb = document.getElementById('sum-base-burn');
-  if (bb) bb.value = _baseBurn.value ?? '';
+function showBaseBurnInput() {
+  const el = document.getElementById('sum-base-burn');
+  if (el) el.value = _baseBurn.value ?? '';
 }
 
 // Grundverbrauch vom Server übernehmen, wenn dessen Zeitstempel neuer ist
@@ -1807,7 +1797,7 @@ function applyRemoteBaseBurn(settings) {
   const value = settings.base_burn ?? null;
   _baseBurn = { value, ts };
   try { localStorage.setItem(BASE_BURN_KEY, JSON.stringify(_baseBurn)); } catch (e) {}
-  showKcalGoalInput();
+  showBaseBurnInput();
 }
 
 function saveBaseBurn() {
@@ -1816,29 +1806,8 @@ function saveBaseBurn() {
   const value = (el.value === '' || !(val >= 0)) ? null : Math.round(val);
   _baseBurn = { value, ts: Date.now() };
   try { localStorage.setItem(BASE_BURN_KEY, JSON.stringify(_baseBurn)); } catch (e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
-  showKcalGoalInput();
+  showBaseBurnInput();
   showToast(value == null ? 'Grundverbrauch entfernt' : '✓ Grundverbrauch gespeichert');
-  dbAutoSave(() => SupabaseSync.saveSettings(currentSyncSettings()));
-}
-
-// Kalorienziel vom Server übernehmen, wenn dessen Zeitstempel neuer ist (wie beim Purin-Limit)
-function applyRemoteKcalGoal(settings) {
-  const ts = settings?.kcal_goal_ts || 0;
-  if (!ts || ts <= _kcalGoal.ts) return;
-  const value = settings.kcal_goal ?? null;
-  _kcalGoal = { value, ts };
-  try { localStorage.setItem(KCAL_GOAL_KEY, JSON.stringify(_kcalGoal)); } catch (e) {}
-  showKcalGoalInput();
-}
-
-function saveKcalGoal() {
-  const el = document.getElementById('sum-goal');
-  const val = parseFloat(el.value);
-  const value = (el.value === '' || !(val >= 0)) ? null : Math.round(val);
-  _kcalGoal = { value, ts: Date.now() };
-  try { localStorage.setItem(KCAL_GOAL_KEY, JSON.stringify(_kcalGoal)); } catch (e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
-  showKcalGoalInput();
-  showToast(value == null ? 'Kalorienziel entfernt' : '✓ Kalorienziel gespeichert');
   dbAutoSave(() => SupabaseSync.saveSettings(currentSyncSettings()));
 }
 
@@ -1898,7 +1867,7 @@ function renderSummaryChart() {
   const empty      = document.getElementById('schart-empty');
   const rangeEmpty = document.getElementById('schart-range-empty');
   if (!canvas) return;
-  const metric = document.getElementById('schart-metric')?.value || 'both';
+  const diffLine = document.getElementById('schart-diff');
 
   const keys = summaryDaily
     ? [...new Set([...summaryDaily.intake.keys(), ...summaryDaily.burn.keys()])].sort((a, b) => a - b)
@@ -1906,6 +1875,7 @@ function renderSummaryChart() {
 
   const hideChart = () => {
     canvas.style.display = 'none';
+    if (diffLine) diffLine.textContent = '';
     if (summaryChartInstance) { summaryChartInstance.destroy(); summaryChartInstance = null; }
   };
 
@@ -1938,6 +1908,20 @@ function renderSummaryChart() {
   const inVals  = shown.map(k => intake.has(k) ? intake.get(k) : null);
   const outVals = shown.map(k => burn.has(k) ? burn.get(k) : null);
   const diffVals = shown.map((k, i) => (inVals[i] != null && outVals[i] != null) ? inVals[i] - outVals[i] : null);
+  const fmt = v => v.toLocaleString('de-DE');
+  const signed = d => (d > 0 ? '+' : d < 0 ? '−' : '±') + fmt(Math.abs(d));
+
+  // Zeitraum-Summe nur über Tage, an denen beide Werte vorliegen (sonst wäre die Differenz verzerrt)
+  const pairs = shown.map((k, i) => i).filter(i => diffVals[i] != null);
+  if (diffLine) {
+    if (pairs.length) {
+      const sIn  = pairs.reduce((s, i) => s + inVals[i], 0);
+      const sOut = pairs.reduce((s, i) => s + outVals[i], 0);
+      diffLine.textContent = `Zeitraum (${pairs.length} Tage mit Aufnahme und Verbrauch): aufgenommen ${fmt(sIn)} · verbraucht ${fmt(sOut)} · Differenz ${signed(sIn - sOut)} kcal`;
+    } else {
+      diffLine.textContent = '';
+    }
+  }
 
   const isDark    = isDarkMode();
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
@@ -1949,10 +1933,7 @@ function renderSummaryChart() {
     borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
     fill: false, tension: 0.3, spanGaps: true,
   });
-  const datasets = metric === 'diff'
-    ? [line('Differenz (kcal)', diffVals, '#378ADD')]
-    : [line('Aufgenommen (kcal)', inVals, '#EF9F27'), line('Verbraucht (kcal)', outVals, '#639922')];
-  const fmt = v => v.toLocaleString('de-DE');
+  const datasets = [line('Aufgenommen (kcal)', inVals, '#EF9F27'), line('Verbraucht (kcal)', outVals, '#639922')];
 
   if (summaryChartInstance) summaryChartInstance.destroy();
 
@@ -1967,19 +1948,25 @@ function renderSummaryChart() {
         tooltip: {
           backgroundColor: bgColor, borderColor: gridColor, borderWidth: 1,
           titleColor: isDark ? '#f0ede6' : '#1a1a18', bodyColor: textColor,
-          callbacks: { label: ctx => ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` }
+          callbacks: {
+            label: ctx => ctx.parsed.y == null ? null : ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+            afterBody: items => {
+              const d = items.length ? diffVals[items[0].dataIndex] : null;
+              return d == null ? '' : `Differenz: ${signed(d)} kcal`;
+            },
+          }
         }
       },
       scales: {
         x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { beginAtZero: metric !== 'diff', ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
+        y: { beginAtZero: true, ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
       }
     }
   });
 }
 
 async function renderSummary() {
-  showKcalGoalInput();
+  showBaseBurnInput();
   const status = document.getElementById('sum-status');
   const fmt    = n => Math.round(n).toLocaleString('de-DE');
   const set = (id, text) => { document.getElementById(id).textContent = text; };
@@ -2003,7 +1990,6 @@ async function renderSummary() {
       SupabaseSync.pullIndoor(),
     ]);
     if (![days, today, walks, indoor].every(Array.isArray)) throw new Error('Unerwartete Antwort');
-    applyRemoteKcalGoal(today[0]?.settings);
     applyRemoteBaseBurn(today[0]?.settings);
 
     // Tageswerte einmal bilden; Karten und Verlauf nutzen dieselben Zahlen.
@@ -2637,7 +2623,7 @@ async function syncDownload() {
     markIndoorSynced();
 
     // Limit vor dem Tagesverbrauch übernehmen: sonst schreibt saveToStorage() den alten lokalen Wert zurück
-    if (todayRows?.length) { applyRemoteLimit(todayRows[0].settings); applyRemoteKcalGoal(todayRows[0].settings); applyRemoteBaseBurn(todayRows[0].settings); }
+    if (todayRows?.length) { applyRemoteLimit(todayRows[0].settings); applyRemoteBaseBurn(todayRows[0].settings); }
 
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
@@ -2706,7 +2692,6 @@ async function liveRefresh() {
             : new Date(row.ts).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
           try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
           applyRemoteLimit(row.settings);
-          applyRemoteKcalGoal(row.settings);
           applyRemoteBaseBurn(row.settings);
           renderTracker();
         }

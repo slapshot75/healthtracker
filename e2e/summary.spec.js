@@ -1,7 +1,7 @@
 import { test, expect } from './support/fixtures.js';
 import { setupSupabase, writesTo } from './support/supabase-mock.js';
 
-// Seite "Gesamtverbrauch": Kalorienbilanz, Verlauf und Kalorienziel.
+// Seite "Gesamtverbrauch": Kalorienbilanz, Verlauf und Grundverbrauch.
 // Die Uhr im Browser steht fest auf dem 15.06.2026, 12:00 Uhr (Europe/Berlin). So hängt
 // "heute" nicht an der echten Uhrzeit und der Test bleibt auch um Mitternacht stabil.
 
@@ -100,13 +100,16 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
     ]);
   });
 
-  test('Auswahl "Differenz" zeigt aufgenommen minus verbraucht', async ({ page }) => {
+  test('Differenz steht als Zahl unter dem Verlauf und im Tooltip, nur zwei Linien', async ({ page }) => {
     await setupSupabase(page, SERVER);
     await openSummary(page);
-    await page.selectOption('#schart-metric', 'diff');
 
-    const series = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.data));
-    expect(series).toEqual([[1300, 350]]);
+    // Tag früher: 1800 − 500 = 1300; heute: 600 − 250 = 350; Zeitraum: 2400 − 750 = 1650
+    await expect(page.locator('#schart-diff')).toContainText('Differenz +1.650 kcal');
+    const labels = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.label));
+    expect(labels).toEqual(['Aufgenommen (kcal)', 'Verbraucht (kcal)']);
+    const tip = await page.evaluate(() => summaryChartInstance.options.plugins.tooltip.callbacks.afterBody([{ dataIndex: 0 }]));
+    expect(tip).toBe('Differenz: +1.300 kcal');
   });
 
   test('Tag ohne Eintrag bleibt eine Lücke, keine Null', async ({ page }) => {
@@ -115,6 +118,8 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
 
     const series = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.data));
     expect(series).toEqual([[1800, null], [500, 250]]);
+    // Nur der frühere Tag hat beide Werte: Differenz 1300, heute bleibt außen vor
+    await expect(page.locator('#schart-diff')).toContainText('Differenz +1.300 kcal');
   });
 
   test('Zeitraum ohne Daten: Hinweis, "Alle anzeigen" stellt den Verlauf wieder her', async ({ page }) => {
@@ -131,63 +136,6 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
     await expect(page.locator('#schart-range-empty')).toBeHidden();
     await expect(page.locator('#summary-chart')).toBeVisible();
     expect(await page.evaluate(() => summaryChartInstance.data.labels.length)).toBe(2);
-  });
-});
-
-test.describe('Gesamtverbrauch – Kalorienziel', () => {
-  test('Speichern schreibt nur die settings-Spalte, items bleiben unberührt', async ({ page }) => {
-    const requests = await setupSupabase(page, { ...SERVER, 'PATCH:purin_today': [{ user_id: 'mario' }] });
-    await openSummary(page);
-    requests.length = 0;
-
-    await page.fill('#sum-goal', '2200');
-    await page.locator('#sum-goal').dispatchEvent('change');
-
-    await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(1);
-    const [patch] = writesTo(requests, 'purin_today');
-    expect(patch.method).toBe('PATCH');
-    expect(patch.query).toBe('?user_id=eq.mario');
-    expect(Object.keys(patch.body)).toEqual(['settings']);
-    expect(patch.body.settings.kcal_goal).toBe(2200);
-    expect(typeof patch.body.settings.kcal_goal_ts).toBe('number');
-    expect(patch.body.settings.purin_limit).toBe(180); // Limit wird mitgeschickt, nicht gelöscht
-
-    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('purin_kcal_goal')));
-    expect(stored.value).toBe(2200);
-  });
-
-  test('leeres Feld entfernt das Ziel', async ({ page }) => {
-    const requests = await setupSupabase(page, { ...SERVER, 'PATCH:purin_today': [{ user_id: 'mario' }] });
-    await openSummary(page);
-    await page.fill('#sum-goal', '2200');
-    await page.locator('#sum-goal').dispatchEvent('change');
-    await expect.poll(() => writesTo(requests, 'purin_today').length).toBeGreaterThan(0);
-    requests.length = 0;
-
-    await page.fill('#sum-goal', '');
-    await page.locator('#sum-goal').dispatchEvent('change');
-
-    await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(1);
-    expect(writesTo(requests, 'purin_today')[0].body.settings.kcal_goal).toBeNull();
-  });
-
-  test('neueres Ziel vom Server wird übernommen', async ({ page }) => {
-    const server = { ...SERVER, purin_today: [{ ...SERVER.purin_today[0], settings: { kcal_goal: 1900, kcal_goal_ts: 5000 } }] };
-    await setupSupabase(page, server);
-    await openSummary(page);
-
-    await expect(page.locator('#sum-goal')).toHaveValue('1900');
-  });
-
-  test('älteres Ziel vom Server überschreibt den lokalen Wert nicht', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('purin_kcal_goal', JSON.stringify({ value: 2500, ts: 9000 }));
-    });
-    const server = { ...SERVER, purin_today: [{ ...SERVER.purin_today[0], settings: { kcal_goal: 1900, kcal_goal_ts: 5000 } }] };
-    await setupSupabase(page, server);
-    await openSummary(page);
-
-    await expect(page.locator('#sum-goal')).toHaveValue('2500');
   });
 });
 
@@ -223,6 +171,26 @@ test.describe('Gesamtverbrauch – Grundverbrauch ohne Sport', () => {
     expect(Object.keys(patch.body)).toEqual(['settings']);
     expect(patch.body.settings.base_burn).toBe(1800);
     expect(typeof patch.body.settings.base_burn_ts).toBe('number');
-    expect(patch.body.settings.kcal_goal).toBeNull(); // Kalorienziel bleibt unberührt
+    expect(patch.body.settings).not.toHaveProperty('kcal_goal'); // altes Kalorienziel wird nicht mehr geschrieben
   });
+});
+
+test('altes Kalorienziel auf dem Server wird ignoriert und beim Speichern nicht mehr geschrieben', async ({ page }) => {
+  const server = {
+    ...SERVER,
+    'PATCH:purin_today': [{ user_id: 'mario' }],
+    purin_today: [{ ...SERVER.purin_today[0], settings: { kcal_goal: 1900, kcal_goal_ts: 5000 } }],
+  };
+  const requests = await setupSupabase(page, server);
+  await openSummary(page);
+  requests.length = 0;
+
+  await page.fill('#sum-base-burn', '1800');
+  await page.locator('#sum-base-burn').dispatchEvent('change');
+
+  await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(1);
+  const [patch] = writesTo(requests, 'purin_today');
+  expect(patch.body.settings).not.toHaveProperty('kcal_goal');
+  expect(patch.body.settings).not.toHaveProperty('kcal_goal_ts');
+  expect(await page.locator('#sum-goal').count()).toBe(0);
 });

@@ -211,8 +211,8 @@ Fehler werden nicht in `js/supabase.js` angezeigt. Der Aufrufer entscheidet, ob 
 - `renderSummary()` — Kalorienbilanz aus dem Serverstand (`pullDays`, `pullToday`, `pullWalks`, `pullIndoor`); ohne Anmeldung nur ein Hinweis
 - `buildSummaryDaily(days, today, burnRows)` — Kalorien je Tag: Aufnahme aus `purin_history` (ohne heute) + `purin_today`, Verbrauch aus Gehrechner und Indoor-Rad plus Grundverbrauch. Karten (`renderSummary`) und Verlauf nutzen dieselben Tageswerte
 - **Grundverbrauch ohne Sport:** `_baseBurn` (`{value, ts}`, `localStorage` `purin_base_burn`), `saveBaseBurn()`, `applyRemoteBaseBurn(settings)`. Fester kcal-Wert je Tag, angerechnet an jedem Tag mit Aufnahme oder Einheit sowie heute; ohne Wert bleibt das Verhalten unverändert. Settings-Felder `base_burn`, `base_burn_ts`, neuerer Zeitstempel gewinnt
-- `renderSummaryChart()` / `initSummaryDateRange(keys)` / `resetSummaryDateRange()` — Verlauf („Aufgenommen & Verbraucht“ oder „Differenz“); Tage ohne Eintrag sind Lücken, keine Nullen
-- **Kalorienziel:** `_kcalGoal` (`{value, ts}`, `localStorage` `purin_kcal_goal`), `saveKcalGoal()`, `applyRemoteKcalGoal(settings)`, `showKcalGoalInput()`. Liegt wie das Purin-Limit in `purin_today.settings` (`kcal_goal`, `kcal_goal_ts`), der neuere Zeitstempel gewinnt
+- `renderSummaryChart()` / `initSummaryDateRange(keys)` / `resetSummaryDateRange()` — Verlauf mit zwei Linien („Aufgenommen“, „Verbraucht“); die Differenz steht als Zahl im Tooltip (`afterBody`) und in `#schart-diff` (Summe nur über Tage mit beiden Werten). Tage ohne Eintrag sind Lücken, keine Nullen
+- Kalorienziel wurde entfernt. Der Altwert `purin_kcal_goal` wird beim Laden aus `localStorage` gelöscht; Server-Felder `kcal_goal`/`kcal_goal_ts` werden nicht mehr gelesen oder geschrieben
 - `currentSyncSettings()` — alle Werte für `purin_today.settings`; jeder Schreibvorgang auf `purin_today` schickt die ganze Liste
 
 ### Gehrechner

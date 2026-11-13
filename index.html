@@ -553,16 +553,6 @@
       <div class="tab-panel active">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
           <div>
-            <div class="history-title">Kalorienziel</div>
-            <div class="history-sub">Tagesziel in kcal – gespeichert auf diesem Gerät</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <input type="number" id="sum-goal" min="0" max="20000" step="50" inputmode="numeric" placeholder="z. B. 2000" onchange="saveKcalGoal()" style="width:150px;font-size:13px;">
-            <span style="font-size:13px;color:var(--text2);">kcal</span>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:1rem;">
-          <div>
             <div class="history-title">Grundverbrauch ohne Sport</div>
             <div class="history-sub">Fester Tageswert in kcal – wird je Tag mit Eintrag zum Verbrauch addiert</div>
           </div>
@@ -590,16 +580,13 @@
               <label style="font-size:12px;color:var(--text2);">Bis</label>
               <input type="date" id="schart-to" onchange="renderSummaryChart()" style="width:150px;font-size:13px;">
             </div>
-            <select id="schart-metric" onchange="renderSummaryChart()" style="width:auto;">
-              <option value="both">Aufgenommen &amp; Verbraucht</option>
-              <option value="diff">Differenz</option>
-            </select>
             <button onclick="resetSummaryDateRange()" style="height:38px;padding:0 12px;background:none;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;">Alle anzeigen</button>
           </div>
         </div>
         <div id="schart-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Noch keine Daten im Verlauf – bitte anmelden, damit der Stand geladen werden kann.</div>
         <div id="schart-range-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:var(--text3);">Keine Daten im gewählten Zeitraum.</div>
         <div style="position:relative;width:100%;"><canvas id="summary-chart"></canvas></div>
+        <div id="schart-diff" style="margin-top:12px;font-size:13px;color:var(--text2);"></div>
       </div>
     </div>
 
