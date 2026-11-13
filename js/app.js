@@ -761,6 +761,16 @@ let _kcalGoal = (() => {
   } catch (e) {}
   return { value: null, ts: 0 };
 })();
+
+// Grundverbrauch ohne Sport (kcal/Tag): { value: kcal | null, ts } – wie das Kalorienziel in purin_today.settings
+const BASE_BURN_KEY = 'purin_base_burn';
+let _baseBurn = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem(BASE_BURN_KEY) || 'null');
+    if (s && typeof s === 'object') return { value: s.value ?? null, ts: s.ts || 0 };
+  } catch (e) {}
+  return { value: null, ts: 0 };
+})();
 const KCAL_LIMIT    = 2000;
 const PROTEIN_LIMIT = 75;
 const CARBS_LIMIT   = 250;
@@ -1779,12 +1789,36 @@ function currentSyncSettings() {
   return {
     purin_limit: _limitSettings.limit, purin_limit_ts: _limitSettings.ts,
     kcal_goal: _kcalGoal.value, kcal_goal_ts: _kcalGoal.ts,
+    base_burn: _baseBurn.value, base_burn_ts: _baseBurn.ts,
   };
 }
 
 function showKcalGoalInput() {
   const el = document.getElementById('sum-goal');
   if (el) el.value = _kcalGoal.value ?? '';
+  const bb = document.getElementById('sum-base-burn');
+  if (bb) bb.value = _baseBurn.value ?? '';
+}
+
+// Grundverbrauch vom Server übernehmen, wenn dessen Zeitstempel neuer ist
+function applyRemoteBaseBurn(settings) {
+  const ts = settings?.base_burn_ts || 0;
+  if (!ts || ts <= _baseBurn.ts) return;
+  const value = settings.base_burn ?? null;
+  _baseBurn = { value, ts };
+  try { localStorage.setItem(BASE_BURN_KEY, JSON.stringify(_baseBurn)); } catch (e) {}
+  showKcalGoalInput();
+}
+
+function saveBaseBurn() {
+  const el = document.getElementById('sum-base-burn');
+  const val = parseFloat(el.value);
+  const value = (el.value === '' || !(val >= 0)) ? null : Math.round(val);
+  _baseBurn = { value, ts: Date.now() };
+  try { localStorage.setItem(BASE_BURN_KEY, JSON.stringify(_baseBurn)); } catch (e) { showToast('⚠ Speichern fehlgeschlagen', 3000); return; }
+  showKcalGoalInput();
+  showToast(value == null ? 'Grundverbrauch entfernt' : '✓ Grundverbrauch gespeichert');
+  dbAutoSave(() => SupabaseSync.saveSettings(currentSyncSettings()));
 }
 
 // Kalorienziel vom Server übernehmen, wenn dessen Zeitstempel neuer ist (wie beim Purin-Limit)
@@ -1831,6 +1865,13 @@ function buildSummaryDaily(days, today, burnRows) {
     const k = getDayTs(r.ts);
     burn.set(k, (burn.get(k) || 0) + (Number(r.data.kcal) || 0));
   });
+  // Grundverbrauch ohne Sport: je Tag mit Eintrag (Aufnahme oder Einheit) sowie heute
+  if (_baseBurn.value != null) {
+    const base = Number(_baseBurn.value) || 0;
+    new Set([...intake.keys(), ...burn.keys(), todayKey]).forEach(k => {
+      burn.set(k, (burn.get(k) || 0) + base);
+    });
+  }
   return { intake, burn };
 }
 
@@ -1941,7 +1982,6 @@ async function renderSummary() {
   showKcalGoalInput();
   const status = document.getElementById('sum-status');
   const fmt    = n => Math.round(n).toLocaleString('de-DE');
-  const sumKcal = (rows, pick) => rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0);
   const set = (id, text) => { document.getElementById(id).textContent = text; };
   const IDS = ['sum-intake','sum-burned','sum-balance','sum-today-intake','sum-today-burned','sum-today-balance'];
   const clear = () => IDS.forEach(id => set(id, '—'));
@@ -1964,18 +2004,20 @@ async function renderSummary() {
     ]);
     if (![days, today, walks, indoor].every(Array.isArray)) throw new Error('Unerwartete Antwort');
     applyRemoteKcalGoal(today[0]?.settings);
+    applyRemoteBaseBurn(today[0]?.settings);
 
+    // Tageswerte einmal bilden; Karten und Verlauf nutzen dieselben Zahlen.
     // Heute kommt aus purin_today (Live-Stand), vergangene Tage aus purin_history – kein Doppelzählen.
-    const todayMs      = getDayTs();
-    const todayIntake  = sumKcal(today[0]?.items || [], i => i.kcal);
-    const pastIntake   = sumKcal(days.filter(r => r.ts < todayMs), r => r.totals?.kcal);
+    // Verbrauch = Grundverbrauch (falls gesetzt) + Gehrechner- und Indoor-Einheiten je Tag.
+    const burnRows = [...walks, ...indoor];
+    summaryDaily = buildSummaryDaily(days, today, burnRows);
+    const todayMs     = getDayTs();
+    const sumMap      = m => [...m.values()].reduce((s, v) => s + v, 0);
+    const todayIntake = summaryDaily.intake.get(todayMs) || 0;
+    const todayBurn   = summaryDaily.burn.get(todayMs) || 0;
+    const allIntake   = sumMap(summaryDaily.intake);
+    const allBurn     = sumMap(summaryDaily.burn);
 
-    // Verbrauch: alle Gehrechner- und Indoor-Einheiten, heute = Zeitstempel ab Mitternacht
-    const burnRows     = [...walks, ...indoor];
-    const todayBurn    = sumKcal(burnRows.filter(r => r.ts >= todayMs), r => r.data?.kcal);
-    const allBurn      = sumKcal(burnRows, r => r.data?.kcal);
-
-    const allIntake    = pastIntake + todayIntake;
     set('sum-intake',        fmt(allIntake));
     set('sum-burned',        fmt(allBurn));
     set('sum-balance',       diff(allIntake - allBurn));
@@ -1985,7 +2027,6 @@ async function renderSummary() {
     status.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
       + ' · Purin: letzte 90 Tage · Einheiten: letzte 200 je Art';
 
-    summaryDaily = buildSummaryDaily(days, today, burnRows);
     // Ein Fehler im Diagramm (z. B. Chart.js nicht geladen) darf die Bilanz nicht als Ladefehler ausweisen
     try { renderSummaryChart(); } catch (e) { console.warn('Verlauf konnte nicht gezeichnet werden:', e.message); }
   } catch (e) {
@@ -2596,7 +2637,7 @@ async function syncDownload() {
     markIndoorSynced();
 
     // Limit vor dem Tagesverbrauch übernehmen: sonst schreibt saveToStorage() den alten lokalen Wert zurück
-    if (todayRows?.length) { applyRemoteLimit(todayRows[0].settings); applyRemoteKcalGoal(todayRows[0].settings); }
+    if (todayRows?.length) { applyRemoteLimit(todayRows[0].settings); applyRemoteKcalGoal(todayRows[0].settings); applyRemoteBaseBurn(todayRows[0].settings); }
 
     // Restore today — server always wins (nur wenn Daten von heute)
     if (todayRows?.length) {
@@ -2666,6 +2707,7 @@ async function liveRefresh() {
           try { localStorage.setItem(ITEMS_DATE_KEY, dateKey); } catch(e) {}
           applyRemoteLimit(row.settings);
           applyRemoteKcalGoal(row.settings);
+          applyRemoteBaseBurn(row.settings);
           renderTracker();
         }
       } else if (todayRows !== null && trackerItems.length > 0) {

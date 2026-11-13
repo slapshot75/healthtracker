@@ -25,7 +25,7 @@ test.describe('Supabase – purin_today', () => {
     expect(post.body.user_id).toBe('mario');
     expect(typeof post.body.ts).toBe('number');
     expect(post.body.items).toEqual([ITEM]);
-    expect(post.body.settings).toEqual({ purin_limit: 180, purin_limit_ts: 0, kcal_goal: null, kcal_goal_ts: 0 });
+    expect(post.body.settings).toEqual({ purin_limit: 180, purin_limit_ts: 0, kcal_goal: null, kcal_goal_ts: 0, base_burn: null, base_burn_ts: 0 });
   });
 
   test('pushToday: schlägt der POST fehl, wird nichts gelöscht', async ({ page }) => {

@@ -190,3 +190,39 @@ test.describe('Gesamtverbrauch – Kalorienziel', () => {
     await expect(page.locator('#sum-goal')).toHaveValue('2500');
   });
 });
+
+// Grundverbrauch ohne Sport: fester kcal-Wert je Tag mit Eintrag (und heute), addiert zu Gehen/Rad.
+// Handgerechnet mit SERVER: früher 1800 aufgenommen, 500 Einheiten; heute 600 aufgenommen, 250 Einheiten.
+// Grundverbrauch 2000 → früher 2500, heute 2250; Gesamt verbraucht 4750, Differenz −2.350; heute −1.650.
+test.describe('Gesamtverbrauch – Grundverbrauch ohne Sport', () => {
+  test('Grundverbrauch aus dem Server wird je Tag addiert (Karten und Verlauf)', async ({ page }) => {
+    const server = { ...SERVER, purin_today: [{ ...SERVER.purin_today[0], settings: { base_burn: 2000, base_burn_ts: 5000 } }] };
+    await setupSupabase(page, server);
+    await openSummary(page);
+
+    await expect(page.locator('#sum-burned')).toHaveText('4.750');
+    await expect(page.locator('#sum-balance')).toHaveText('−2.350');
+    await expect(page.locator('#sum-today-burned')).toHaveText('2.250');
+    await expect(page.locator('#sum-today-balance')).toHaveText('−1.650');
+    await expect(page.locator('#sum-base-burn')).toHaveValue('2000');
+
+    const series = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.data));
+    expect(series).toEqual([[1800, 600], [2500, 2250]]);
+  });
+
+  test('Speichern schreibt base_burn in die settings-Spalte', async ({ page }) => {
+    const requests = await setupSupabase(page, { ...SERVER, 'PATCH:purin_today': [{ user_id: 'mario' }] });
+    await openSummary(page);
+    requests.length = 0;
+
+    await page.fill('#sum-base-burn', '1800');
+    await page.locator('#sum-base-burn').dispatchEvent('change');
+
+    await expect.poll(() => writesTo(requests, 'purin_today').length).toBe(1);
+    const [patch] = writesTo(requests, 'purin_today');
+    expect(Object.keys(patch.body)).toEqual(['settings']);
+    expect(patch.body.settings.base_burn).toBe(1800);
+    expect(typeof patch.body.settings.base_burn_ts).toBe('number');
+    expect(patch.body.settings.kcal_goal).toBeNull(); // Kalorienziel bleibt unberührt
+  });
+});
