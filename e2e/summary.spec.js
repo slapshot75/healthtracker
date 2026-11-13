@@ -91,7 +91,7 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
 
     const chart = await page.evaluate(() => ({
       labels: summaryChartInstance.data.labels.length,
-      series: summaryChartInstance.data.datasets.map((d) => ({ label: d.label, data: d.data })),
+      series: [summaryChartInstance, summaryChartOutInstance].map((c) => ({ label: c.data.datasets[0].label, data: c.data.datasets[0].data })),
     }));
     expect(chart.labels).toBe(2);
     expect(chart.series).toEqual([
@@ -106,7 +106,7 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
 
     // Tag früher: 1800 − 500 = 1300; heute: 600 − 250 = 350; Zeitraum: 2400 − 750 = 1650
     await expect(page.locator('#schart-diff')).toContainText('Differenz +1.650 kcal');
-    const labels = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.label));
+    const labels = await page.evaluate(() => [summaryChartInstance, summaryChartOutInstance].map((c) => c.data.datasets[0].label));
     expect(labels).toEqual(['Aufgenommen (kcal)', 'Verbraucht (kcal)']);
     const tip = await page.evaluate(() => summaryChartInstance.options.plugins.tooltip.callbacks.afterBody([{ dataIndex: 0 }]));
     expect(tip).toBe('Differenz: +1.300 kcal');
@@ -116,7 +116,7 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
     await setupSupabase(page, { ...SERVER, purin_today: [] });
     await openSummary(page);
 
-    const series = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.data));
+    const series = await page.evaluate(() => [summaryChartInstance, summaryChartOutInstance].map((c) => c.data.datasets[0].data));
     expect(series).toEqual([[1800, null], [500, 250]]);
     // Nur der frühere Tag hat beide Werte: Differenz 1300, heute bleibt außen vor
     await expect(page.locator('#schart-diff')).toContainText('Differenz +1.300 kcal');
@@ -131,10 +131,12 @@ test.describe('Gesamtverbrauch – Verlauf', () => {
     await page.locator('#schart-to').dispatchEvent('change');
     await expect(page.locator('#schart-range-empty')).toBeVisible();
     await expect(page.locator('#summary-chart')).toBeHidden();
+    await expect(page.locator('#summary-chart-out')).toBeHidden();
 
     await page.click('button[onclick="resetSummaryDateRange()"]');
     await expect(page.locator('#schart-range-empty')).toBeHidden();
     await expect(page.locator('#summary-chart')).toBeVisible();
+    await expect(page.locator('#summary-chart-out')).toBeVisible();
     expect(await page.evaluate(() => summaryChartInstance.data.labels.length)).toBe(2);
   });
 });
@@ -154,7 +156,7 @@ test.describe('Gesamtverbrauch – Grundverbrauch ohne Sport', () => {
     await expect(page.locator('#sum-today-balance')).toHaveText('−1.650');
     await expect(page.locator('#sum-base-burn')).toHaveValue('2000');
 
-    const series = await page.evaluate(() => summaryChartInstance.data.datasets.map((d) => d.data));
+    const series = await page.evaluate(() => [summaryChartInstance, summaryChartOutInstance].map((c) => c.data.datasets[0].data));
     expect(series).toEqual([[1800, 600], [2500, 2250]]);
   });
 

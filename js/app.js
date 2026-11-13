@@ -1776,6 +1776,7 @@ function switchPage(name) {
 // Liest immer den Serverstand. Ohne Cloud-Verbindung wird nichts aus dem lokalen Speicher angezeigt.
 let summaryDaily = null;        // { intake: Map<dayTs, kcal>, burn: Map<dayTs, kcal> }
 let summaryChartInstance = null;
+let summaryChartOutInstance = null;
 
 // Alle Werte, die in purin_today.settings liegen (jedes Schreiben schickt die ganze Liste)
 function currentSyncSettings() {
@@ -1863,24 +1864,27 @@ function resetSummaryDateRange() {
 }
 
 function renderSummaryChart() {
-  const canvas     = document.getElementById('summary-chart');
+  const canvasIn   = document.getElementById('summary-chart');
+  const canvasOut  = document.getElementById('summary-chart-out');
   const empty      = document.getElementById('schart-empty');
   const rangeEmpty = document.getElementById('schart-range-empty');
-  if (!canvas) return;
-  const diffLine = document.getElementById('schart-diff');
+  const diffLine   = document.getElementById('schart-diff');
+  if (!canvasIn || !canvasOut) return;
 
   const keys = summaryDaily
     ? [...new Set([...summaryDaily.intake.keys(), ...summaryDaily.burn.keys()])].sort((a, b) => a - b)
     : [];
 
-  const hideChart = () => {
-    canvas.style.display = 'none';
+  const hideCharts = () => {
+    canvasIn.style.display = 'none';
+    canvasOut.style.display = 'none';
     if (diffLine) diffLine.textContent = '';
     if (summaryChartInstance) { summaryChartInstance.destroy(); summaryChartInstance = null; }
+    if (summaryChartOutInstance) { summaryChartOutInstance.destroy(); summaryChartOutInstance = null; }
   };
 
   if (!keys.length) {
-    hideChart();
+    hideCharts();
     empty.style.display = 'block';
     if (rangeEmpty) rangeEmpty.style.display = 'none';
     return;
@@ -1896,11 +1900,12 @@ function renderSummaryChart() {
   });
 
   if (!shown.length) {
-    hideChart();
+    hideCharts();
     if (rangeEmpty) rangeEmpty.style.display = 'block';
     return;
   }
-  canvas.style.display = 'block';
+  canvasIn.style.display = 'block';
+  canvasOut.style.display = 'block';
   if (rangeEmpty) rangeEmpty.style.display = 'none';
 
   const { intake, burn } = summaryDaily;
@@ -1928,18 +1933,22 @@ function renderSummaryChart() {
   const textColor = isDark ? '#9b9a94' : '#6b6a65';
   const bgColor   = isDark ? '#1c1c1a' : '#ffffff';
 
-  const line = (label, data, color) => ({
-    label, data, borderColor: color, backgroundColor: color + '22',
-    borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
-    fill: false, tension: 0.3, spanGaps: true,
-  });
-  const datasets = [line('Aufgenommen (kcal)', inVals, '#EF9F27'), line('Verbraucht (kcal)', outVals, '#639922')];
+  // Beide Diagramme auf derselben Y-Skala, damit Aufnahme und Verbrauch vergleichbar bleiben
+  const yMax = Math.max(0, ...inVals.filter(v => v != null), ...outVals.filter(v => v != null)) * 1.1;
 
   if (summaryChartInstance) summaryChartInstance.destroy();
+  if (summaryChartOutInstance) summaryChartOutInstance.destroy();
 
-  summaryChartInstance = new Chart(canvas, {
+  const makeChart = (canvas, label, data, color) => new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets },
+    data: {
+      labels,
+      datasets: [{
+        label, data, borderColor: color, backgroundColor: color + '22',
+        borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
+        fill: false, tension: 0.3, spanGaps: true,
+      }],
+    },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
@@ -1959,10 +1968,13 @@ function renderSummaryChart() {
       },
       scales: {
         x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { beginAtZero: true, ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
+        y: { beginAtZero: true, suggestedMax: yMax, ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
       }
     }
   });
+
+  summaryChartInstance    = makeChart(canvasIn,  'Aufgenommen (kcal)', inVals,  '#EF9F27');
+  summaryChartOutInstance = makeChart(canvasOut, 'Verbraucht (kcal)',  outVals, '#639922');
 }
 
 async function renderSummary() {
