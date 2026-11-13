@@ -1776,7 +1776,6 @@ function switchPage(name) {
 // Liest immer den Serverstand. Ohne Cloud-Verbindung wird nichts aus dem lokalen Speicher angezeigt.
 let summaryDaily = null;        // { intake: Map<dayTs, kcal>, burn: Map<dayTs, kcal> }
 let summaryChartInstance = null;
-let summaryChartOutInstance = null;
 
 // Alle Werte, die in purin_today.settings liegen (jedes Schreiben schickt die ganze Liste)
 function currentSyncSettings() {
@@ -1864,27 +1863,24 @@ function resetSummaryDateRange() {
 }
 
 function renderSummaryChart() {
-  const canvasIn   = document.getElementById('summary-chart');
-  const canvasOut  = document.getElementById('summary-chart-out');
+  const canvas     = document.getElementById('summary-chart');
   const empty      = document.getElementById('schart-empty');
   const rangeEmpty = document.getElementById('schart-range-empty');
   const diffLine   = document.getElementById('schart-diff');
-  if (!canvasIn || !canvasOut) return;
+  if (!canvas) return;
 
   const keys = summaryDaily
     ? [...new Set([...summaryDaily.intake.keys(), ...summaryDaily.burn.keys()])].sort((a, b) => a - b)
     : [];
 
-  const hideCharts = () => {
-    canvasIn.style.display = 'none';
-    canvasOut.style.display = 'none';
+  const hideChart = () => {
+    canvas.style.display = 'none';
     if (diffLine) diffLine.textContent = '';
     if (summaryChartInstance) { summaryChartInstance.destroy(); summaryChartInstance = null; }
-    if (summaryChartOutInstance) { summaryChartOutInstance.destroy(); summaryChartOutInstance = null; }
   };
 
   if (!keys.length) {
-    hideCharts();
+    hideChart();
     empty.style.display = 'block';
     if (rangeEmpty) rangeEmpty.style.display = 'none';
     return;
@@ -1900,12 +1896,11 @@ function renderSummaryChart() {
   });
 
   if (!shown.length) {
-    hideCharts();
+    hideChart();
     if (rangeEmpty) rangeEmpty.style.display = 'block';
     return;
   }
-  canvasIn.style.display = 'block';
-  canvasOut.style.display = 'block';
+  canvas.style.display = 'block';
   if (rangeEmpty) rangeEmpty.style.display = 'none';
 
   const { intake, burn } = summaryDaily;
@@ -1933,22 +1928,18 @@ function renderSummaryChart() {
   const textColor = isDark ? '#9b9a94' : '#6b6a65';
   const bgColor   = isDark ? '#1c1c1a' : '#ffffff';
 
-  // Beide Diagramme auf derselben Y-Skala, damit Aufnahme und Verbrauch vergleichbar bleiben
-  const yMax = Math.max(0, ...inVals.filter(v => v != null), ...outVals.filter(v => v != null)) * 1.1;
+  // Ein Diagramm, je Tag zwei Balken nebeneinander; Tage ohne Wert bleiben leer
+  const bar = (label, data, color) => ({
+    label, data, backgroundColor: color, borderRadius: 3,
+    categoryPercentage: 0.7, barPercentage: 0.9, maxBarThickness: 28,
+  });
+  const datasets = [bar('Aufgenommen (kcal)', inVals, '#EF9F27'), bar('Verbraucht (kcal)', outVals, '#639922')];
 
   if (summaryChartInstance) summaryChartInstance.destroy();
-  if (summaryChartOutInstance) summaryChartOutInstance.destroy();
 
-  const makeChart = (canvas, label, data, color) => new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label, data, borderColor: color, backgroundColor: color + '22',
-        borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
-        fill: false, tension: 0.3, spanGaps: true,
-      }],
-    },
+  summaryChartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
@@ -1967,14 +1958,11 @@ function renderSummaryChart() {
         }
       },
       scales: {
-        x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { beginAtZero: true, suggestedMax: yMax, ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
+        x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: textColor, font: { size: 11 }, callback: v => fmt(v) }, grid: { color: gridColor } }
       }
     }
   });
-
-  summaryChartInstance    = makeChart(canvasIn,  'Aufgenommen (kcal)', inVals,  '#EF9F27');
-  summaryChartOutInstance = makeChart(canvasOut, 'Verbraucht (kcal)',  outVals, '#639922');
 }
 
 async function renderSummary() {
